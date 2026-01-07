@@ -1,0 +1,2 @@
+# Run linting, formatting on staged files and type checking on entire codebase
+cd frontend && npx lint-staged && npm run type-check

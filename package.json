@@ -1,0 +1,27 @@
+{
+  "name": "riverhub",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "prepare": "husky"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zakthompson/riverhub.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/zakthompson/riverhub/issues"
+  },
+  "homepage": "https://github.com/zakthompson/riverhub#readme",
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.18",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.7"
+  }
+}

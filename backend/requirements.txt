@@ -1,0 +1,6 @@
+fastapi==0.115.12
+uvicorn[standard]==0.34.0
+python-dotenv==1.0.1
+mfrc522==0.0.7
+RPi.GPIO==0.7.1
+websockets==14.1
