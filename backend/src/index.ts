@@ -36,6 +36,26 @@ async function main() {
     })
   })
 
+  // Sonos favorites endpoint
+  app.get('/api/favorites', async (req, res) => {
+    try {
+      const favorites = await sonos.getFavorites()
+      res.json({
+        count: favorites.length,
+        favorites: favorites.map((fav) => ({
+          title: fav.title,
+          uri: fav.uri,
+        })),
+      })
+    } catch (error) {
+      console.error('Error fetching favorites:', error)
+      res.status(500).json({
+        error: 'Failed to fetch Sonos favorites',
+        message: error instanceof Error ? error.message : String(error),
+      })
+    }
+  })
+
   // Serve static files in production
   if (config.nodeEnv === 'production') {
     console.log(`Serving static files from: ${config.paths.staticFiles}`)

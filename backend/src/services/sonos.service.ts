@@ -103,6 +103,23 @@ export class SonosService extends EventEmitter {
     }
   }
 
+  /**
+   * Get all Sonos Favorites
+   * Returns list of favorites with their titles and URIs
+   */
+  async getFavorites(): Promise<Array<{ title: string; uri: string }>> {
+    await this.ensureDeviceReady();
+
+    try {
+      const result = await this.device!.getFavorites();
+      console.log(`Found ${result.items?.length || 0} Sonos favorites`);
+      return result.items || [];
+    } catch (error) {
+      console.error('Error getting Sonos favorites:', error);
+      throw this.formatError(error);
+    }
+  }
+
   async playUrl(url: string): Promise<void> {
     await this.ensureDeviceReady();
 
