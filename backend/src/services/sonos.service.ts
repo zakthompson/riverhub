@@ -2,6 +2,8 @@ import { EventEmitter } from 'events'
 import { DeviceDiscovery, Sonos } from 'sonos'
 import type { TrackInfo, PlaybackState, SonosError, SonosState } from '../types/sonos.types'
 
+const { discoverMultiple } = DeviceDiscovery
+
 const POLLING_INTERVAL = 1500 // 1.5 seconds
 
 export class SonosService extends EventEmitter {
@@ -25,24 +27,37 @@ export class SonosService extends EventEmitter {
 
     this.isDiscovering = true
     try {
-      const devices = await DeviceDiscovery({
+      console.log(`Discovering Sonos speakers on network...`)
+
+      // Discover all Sonos devices on the network
+      const devices = await discoverMultiple({
         timeout: 5000,
       })
 
+      console.log(`Found ${devices.length} Sonos speaker(s)`)
+
+      // Find the speaker with matching name
       for (const device of devices) {
         const name = await device.getName()
+        console.log(`  - ${name}`)
+
         if (name === this.speakerName) {
           this.device = device
-          console.log(`✓ Found Sonos speaker: ${this.speakerName}`)
-          break
+          console.log(`✓ Connected to Sonos speaker: ${this.speakerName}`)
+          return
         }
       }
 
-      if (!this.device) {
-        throw new Error(`Speaker "${this.speakerName}" not found on network`)
-      }
+      // If we get here, the speaker wasn't found
+      const availableNames = await Promise.all(devices.map((d) => d.getName()))
+      throw new Error(
+        `Speaker "${this.speakerName}" not found. Available speakers: ${availableNames.join(', ')}`,
+      )
     } catch (error) {
       console.error('Error discovering Sonos speaker:', error)
+      console.error(
+        'Make sure the Sonos speaker is on the network and SONOS_SPEAKER_NAME in .env matches exactly.',
+      )
       throw this.formatError(error)
     } finally {
       this.isDiscovering = false
