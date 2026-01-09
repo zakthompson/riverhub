@@ -1,80 +1,85 @@
-import { EventEmitter } from 'events'
-import { AsyncDeviceDiscovery, Sonos } from 'sonos'
-import type { TrackInfo, PlaybackState, SonosError, SonosState } from '../types/sonos.types'
+import { EventEmitter } from 'events';
+import { AsyncDeviceDiscovery, Sonos } from 'sonos';
+import type {
+  TrackInfo,
+  PlaybackState,
+  SonosError,
+  SonosState,
+} from '../types/sonos.types';
 
-const POLLING_INTERVAL = 1500 // 1.5 seconds
+const POLLING_INTERVAL = 1500; // 1.5 seconds
 
 export class SonosService extends EventEmitter {
-  private device: Sonos | null = null
-  private speakerName: string
-  private isDiscovering = false
-  private pollingInterval: NodeJS.Timeout | null = null
+  private device: Sonos | null = null;
+  private speakerName: string;
+  private isDiscovering = false;
+  private pollingInterval: NodeJS.Timeout | null = null;
 
   constructor(speakerName: string) {
-    super()
-    this.speakerName = speakerName
+    super();
+    this.speakerName = speakerName;
   }
 
   async initialize(): Promise<void> {
-    await this.discoverSpeaker()
-    this.startPolling()
+    await this.discoverSpeaker();
+    this.startPolling();
   }
 
   private async discoverSpeaker(): Promise<void> {
-    if (this.device || this.isDiscovering) return
+    if (this.device || this.isDiscovering) return;
 
-    this.isDiscovering = true
+    this.isDiscovering = true;
     try {
-      console.log(`Discovering Sonos speakers on network...`)
+      console.log(`Discovering Sonos speakers on network...`);
 
       // Create discovery instance and discover all devices
-      const discovery = new AsyncDeviceDiscovery()
+      const discovery = new AsyncDeviceDiscovery();
       const devices = await discovery.discoverMultiple({
         timeout: 5000,
-      })
+      });
 
-      console.log(`Found ${devices.length} Sonos speaker(s)`)
+      console.log(`Found ${devices.length} Sonos speaker(s)`);
 
       // Find the speaker with matching name
       for (const device of devices) {
-        const name = await device.getName()
-        console.log(`  - ${name}`)
+        const name = await device.getName();
+        console.log(`  - ${name}`);
 
         if (name === this.speakerName) {
-          this.device = device
-          console.log(`✓ Connected to Sonos speaker: ${this.speakerName}`)
-          return
+          this.device = device;
+          console.log(`✓ Connected to Sonos speaker: ${this.speakerName}`);
+          return;
         }
       }
 
       // If we get here, the speaker wasn't found
-      const availableNames = await Promise.all(devices.map((d) => d.getName()))
+      const availableNames = await Promise.all(devices.map((d) => d.getName()));
       throw new Error(
-        `Speaker "${this.speakerName}" not found. Available speakers: ${availableNames.join(', ')}`,
-      )
+        `Speaker "${this.speakerName}" not found. Available speakers: ${availableNames.join(', ')}`
+      );
     } catch (error) {
-      console.error('Error discovering Sonos speaker:', error)
+      console.error('Error discovering Sonos speaker:', error);
       console.error(
-        'Make sure the Sonos speaker is on the network and SONOS_SPEAKER_NAME in .env matches exactly.',
-      )
-      throw this.formatError(error)
+        'Make sure the Sonos speaker is on the network and SONOS_SPEAKER_NAME in .env matches exactly.'
+      );
+      throw this.formatError(error);
     } finally {
-      this.isDiscovering = false
+      this.isDiscovering = false;
     }
   }
 
   private startPolling(): void {
-    if (this.pollingInterval) return
+    if (this.pollingInterval) return;
 
     this.pollingInterval = setInterval(async () => {
-      if (!this.device) return
+      if (!this.device) return;
 
       try {
         const [playbackState, currentTrack, volume] = await Promise.all([
           this.getPlaybackState(),
           this.getCurrentTrack(),
           this.getVolume(),
-        ])
+        ]);
 
         const state: SonosState = {
           playbackState,
@@ -82,139 +87,102 @@ export class SonosService extends EventEmitter {
           volume,
           isPlaying: playbackState === 'playing',
           speakerName: this.speakerName,
-        }
+        };
 
-        this.emit('state', state)
+        this.emit('state', state);
       } catch (error) {
-        console.error('Error polling Sonos state:', error)
+        console.error('Error polling Sonos state:', error);
       }
-    }, POLLING_INTERVAL)
+    }, POLLING_INTERVAL);
   }
 
   stopPolling(): void {
     if (this.pollingInterval) {
-      clearInterval(this.pollingInterval)
-      this.pollingInterval = null
+      clearInterval(this.pollingInterval);
+      this.pollingInterval = null;
     }
-  }
-
-  /**
-   * Convert Apple Music URLs to Sonos-compatible format
-   * Based on: https://github.com/SoCo/SoCo/issues/812#issuecomment-786573041
-   */
-  private convertAppleMusicUrl(url: string): string {
-    // Match Apple Music URLs: https://music.apple.com/{country}/album/{name}/{id}
-    // or: https://music.apple.com/album/{id}
-    const albumMatch = url.match(/music\.apple\.com\/(?:[a-z]{2}\/)?album\/(?:[\w-]+\/)?(\d+)/i)
-    if (albumMatch) {
-      const albumId = albumMatch[1]
-      return `x-sonos-http:album:${albumId}.mp4?sid=204&flags=8224&sn=1`
-    }
-
-    // Match playlist URLs: https://music.apple.com/{country}/playlist/{name}/{id}
-    const playlistMatch = url.match(/music\.apple\.com\/(?:[a-z]{2}\/)?playlist\/(?:[\w-]+\/)?(\d+)/i)
-    if (playlistMatch) {
-      const playlistId = playlistMatch[1]
-      return `x-sonos-http:playlist:${playlistId}.mp4?sid=204&flags=8224&sn=1`
-    }
-
-    // Match song URLs: https://music.apple.com/{country}/song/{name}/{id}
-    const songMatch = url.match(/music\.apple\.com\/(?:[a-z]{2}\/)?song\/(?:[\w-]+\/)?(\d+)/i)
-    if (songMatch) {
-      const songId = songMatch[1]
-      return `x-sonos-http:song:${songId}.mp4?sid=204&flags=8224&sn=1`
-    }
-
-    // If not Apple Music, return as-is (for Spotify URIs, direct streams, etc.)
-    return url
   }
 
   async playUrl(url: string): Promise<void> {
-    await this.ensureDeviceReady()
+    await this.ensureDeviceReady();
 
     try {
-      // Convert Apple Music URLs to Sonos-compatible format
-      const sonosUrl = this.convertAppleMusicUrl(url)
-      console.log(`Playing URL: ${url}`)
-      if (sonosUrl !== url) {
-        console.log(`  Converted to: ${sonosUrl}`)
-      }
-
-      await this.device!.play(sonosUrl)
+      console.log(`Playing URL: ${url}`);
+      await this.device!.play(url);
     } catch (error) {
-      console.error('Error playing URL:', error)
-      throw this.formatError(error)
+      console.error('Error playing URL:', error);
+      throw this.formatError(error);
     }
   }
 
   async play(): Promise<void> {
-    await this.ensureDeviceReady()
+    await this.ensureDeviceReady();
 
     try {
-      await this.device!.play()
+      await this.device!.play();
     } catch (error) {
-      throw this.formatError(error)
+      throw this.formatError(error);
     }
   }
 
   async pause(): Promise<void> {
-    await this.ensureDeviceReady()
+    await this.ensureDeviceReady();
 
     try {
-      await this.device!.pause()
+      await this.device!.pause();
     } catch (error) {
-      throw this.formatError(error)
+      throw this.formatError(error);
     }
   }
 
   async next(): Promise<void> {
-    await this.ensureDeviceReady()
+    await this.ensureDeviceReady();
 
     try {
-      await this.device!.next()
+      await this.device!.next();
     } catch (error) {
-      throw this.formatError(error)
+      throw this.formatError(error);
     }
   }
 
   async previous(): Promise<void> {
-    await this.ensureDeviceReady()
+    await this.ensureDeviceReady();
 
     try {
-      await this.device!.previous()
+      await this.device!.previous();
     } catch (error) {
-      throw this.formatError(error)
+      throw this.formatError(error);
     }
   }
 
   async setVolume(volume: number): Promise<void> {
-    await this.ensureDeviceReady()
+    await this.ensureDeviceReady();
 
     try {
-      await this.device!.setVolume(volume)
+      await this.device!.setVolume(volume);
     } catch (error) {
-      throw this.formatError(error)
+      throw this.formatError(error);
     }
   }
 
   async getVolume(): Promise<number> {
-    await this.ensureDeviceReady()
+    await this.ensureDeviceReady();
 
     try {
-      return await this.device!.getVolume()
+      return await this.device!.getVolume();
     } catch (error) {
-      throw this.formatError(error)
+      throw this.formatError(error);
     }
   }
 
   async getCurrentTrack(): Promise<TrackInfo | null> {
-    await this.ensureDeviceReady()
+    await this.ensureDeviceReady();
 
     try {
-      const track = await this.device!.currentTrack()
+      const track = await this.device!.currentTrack();
 
       if (!track || !track.title) {
-        return null
+        return null;
       }
 
       return {
@@ -224,40 +192,40 @@ export class SonosService extends EventEmitter {
         albumArtUri: track.albumArtUri,
         duration: track.duration,
         position: track.position,
-      }
+      };
     } catch (error) {
-      console.error('Error getting current track:', error)
-      return null
+      console.error('Error getting current track:', error);
+      return null;
     }
   }
 
   async getPlaybackState(): Promise<PlaybackState> {
-    await this.ensureDeviceReady()
+    await this.ensureDeviceReady();
 
     try {
-      const state = await this.device!.getCurrentState()
+      const state = await this.device!.getCurrentState();
 
       switch (state) {
         case 'playing':
-          return 'playing'
+          return 'playing';
         case 'paused':
-          return 'paused'
+          return 'paused';
         case 'stopped':
-          return 'stopped'
+          return 'stopped';
         case 'transitioning':
-          return 'transitioning'
+          return 'transitioning';
         default:
-          return 'stopped'
+          return 'stopped';
       }
     } catch (error) {
-      console.error('Error getting playback state:', error)
-      return 'stopped'
+      console.error('Error getting playback state:', error);
+      return 'stopped';
     }
   }
 
   private async ensureDeviceReady(): Promise<void> {
     if (!this.device) {
-      await this.discoverSpeaker()
+      await this.discoverSpeaker();
     }
   }
 
@@ -266,18 +234,18 @@ export class SonosService extends EventEmitter {
       return {
         message: error.message,
         code: 'code' in error ? String(error.code) : undefined,
-      }
+      };
     }
     return {
       message: String(error),
-    }
+    };
   }
 
   getSpeakerName(): string {
-    return this.speakerName
+    return this.speakerName;
   }
 
   isConnected(): boolean {
-    return this.device !== null
+    return this.device !== null;
   }
 }
