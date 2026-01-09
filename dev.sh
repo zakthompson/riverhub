@@ -126,17 +126,34 @@ install_backend_deps() {
         log_success "✓ Virtual environment created"
     fi
 
+    # Install cross-platform dependencies (all platforms)
     if [ ! -f "venv/.deps_installed" ] || [ "requirements.txt" -nt "venv/.deps_installed" ]; then
-        log "Installing Python dependencies..."
+        log "Installing Python dependencies (cross-platform)..."
         if venv/bin/pip install -r requirements.txt; then
             touch venv/.deps_installed
-            log_success "✓ Python dependencies installed"
+            log_success "✓ Cross-platform Python dependencies installed"
         else
             log_error "Failed to install Python dependencies"
             exit 1
         fi
     else
-        log "Python dependencies up to date"
+        log "Cross-platform Python dependencies up to date"
+    fi
+
+    # Install Pi-specific dependencies (only on Raspberry Pi)
+    if [ "$PLATFORM" = "pi" ]; then
+        if [ ! -f "venv/.deps_pi_installed" ] || [ "requirements-pi.txt" -nt "venv/.deps_pi_installed" ]; then
+            log "Installing Python dependencies (Raspberry Pi hardware)..."
+            if venv/bin/pip install -r requirements-pi.txt; then
+                touch venv/.deps_pi_installed
+                log_success "✓ Raspberry Pi Python dependencies installed"
+            else
+                log_error "Failed to install Raspberry Pi Python dependencies"
+                exit 1
+            fi
+        else
+            log "Raspberry Pi Python dependencies up to date"
+        fi
     fi
 }
 
