@@ -56,8 +56,7 @@ This allows manual testing with real RFID cards without constant committing/pull
 ## Documentation
 
 - **[CLAUDE.md](./CLAUDE.md)** - Project overview and development principles
-- **[PLAN.md](./PLAN.md)** - Implementation plan with phases (updated for new architecture)
-- **[MIGRATION_PLAN.md](./MIGRATION_PLAN.md)** - Architecture migration details (Phase 3)
+- **[PLAN.md](./PLAN.md)** - Implementation plan with phases and architecture details
 - **[backend/lib/rfid/README.md](./backend/lib/rfid/README.md)** - Python RFID protocol documentation
 
 ## Architecture
@@ -240,7 +239,6 @@ riverhub/
 ├── dev.sh                        # Universal dev script
 ├── sync.sh                       # Remote dev sync
 ├── PLAN.md                       # Implementation plan
-├── MIGRATION_PLAN.md             # Architecture details
 └── CLAUDE.md                     # Development principles
 ```
 

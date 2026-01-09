@@ -100,7 +100,6 @@ riverhub/
 │
 ├── CLAUDE.md
 ├── PLAN.md                       # This file
-├── MIGRATION_PLAN.md             # Architecture migration details
 ├── README.md
 ├── .gitignore
 ├── dev.sh                        # Universal dev script (Pi + dev machine)
@@ -413,11 +412,10 @@ VITE_WS_URL=ws://localhost:8765
 ## How to Use This Plan
 
 1. **Check current phase** - We're currently at Phase 3 complete, Phase 4 next
-2. **Review MIGRATION_PLAN.md** - For detailed architecture migration info
-3. **Test completion criteria** - Ensure phase works before moving on
-4. **Update status** - Mark phases complete as you go
+2. **Test completion criteria** - Ensure phase works before moving on
+3. **Update status** - Mark phases complete as you go
 
 This plan is designed to be resumable. If context is lost:
-1. Review this file + MIGRATION_PLAN.md
+1. Review this file and README.md for current architecture
 2. Identify current phase (Phase 3 complete)
 3. Continue from Phase 4 task list
