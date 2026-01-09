@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events';
 import { AsyncDeviceDiscovery, Sonos } from 'sonos';
+import { parseStringPromise, Builder } from 'xml2js';
 import type {
   TrackInfo,
   PlaybackState,
@@ -122,26 +123,70 @@ export class SonosService extends EventEmitter {
 
   /**
    * Play a favorite by its title
-   * This fetches all favorites and plays the one matching the title
+   * This fetches favorites with RAW metadata and plays the matching one
    */
   async playFavoriteByTitle(title: string): Promise<void> {
     await this.ensureDeviceReady();
 
     try {
-      const favorites = await this.device!.getFavorites();
-      const favorite = favorites.items?.find(
-        (f) => f.title.toLowerCase() === title.toLowerCase()
-      );
+      // Get raw Browse result with full DIDL-Lite metadata (not parsed)
+      const browseResult = await this.device!.contentDirectoryService().Browse({
+        ObjectID: 'FV:2',
+        BrowseFlag: 'BrowseDirectChildren',
+        Filter: '*',
+        StartingIndex: '0',
+        RequestedCount: '100',
+        SortCriteria: '',
+      });
 
-      if (!favorite) {
+      // Parse the DIDL-Lite XML to find our favorite
+      const parsed = await parseStringPromise(browseResult.Result);
+
+      const items = parsed['DIDL-Lite']?.container || parsed['DIDL-Lite']?.item || [];
+      const itemArray = Array.isArray(items) ? items : [items];
+
+      // Find matching favorite by title
+      let matchedItem = null;
+      for (const item of itemArray) {
+        const itemTitle = item['dc:title']?.[0] || '';
+        if (itemTitle.toLowerCase() === title.toLowerCase()) {
+          matchedItem = item;
+          break;
+        }
+      }
+
+      if (!matchedItem) {
         throw new Error(`Favorite "${title}" not found`);
       }
 
-      console.log(`Playing favorite: ${favorite.title}`);
+      console.log(`Playing favorite: ${matchedItem['dc:title'][0]}`);
 
-      // Try using the URI directly with setAVTransportURI (no metadata)
-      // Let Sonos figure out the metadata
-      await this.device!.setAVTransportURI(favorite.uri);
+      // Extract URI from the item
+      const uri = matchedItem.res?.[0]?._ || matchedItem.res?.[0];
+
+      if (!uri) {
+        throw new Error('No URI found in favorite item');
+      }
+
+      // Reconstruct the ORIGINAL DIDL-Lite for this item
+      const builder = new Builder();
+      const didlLite = {
+        'DIDL-Lite': {
+          $: parsed['DIDL-Lite'].$, // Copy namespaces
+          container: matchedItem,
+        },
+      };
+      const metadata = builder.buildObject(didlLite);
+
+      console.log(`URI: ${uri}`);
+      console.log(`Metadata: ${metadata.substring(0, 200)}...`);
+
+      // Use setAVTransportURI with the ORIGINAL metadata
+      await this.device!.setAVTransportURI({
+        uri: uri,
+        metadata: metadata,
+        onlySetUri: false,
+      });
     } catch (error) {
       console.error('Error playing favorite by title:', error);
       throw this.formatError(error);

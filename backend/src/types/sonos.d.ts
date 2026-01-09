@@ -20,6 +20,21 @@ declare module 'sonos' {
       metadata: string
       onlySetUri?: boolean
     }): Promise<any>
+    contentDirectoryService(): {
+      Browse(options: {
+        ObjectID: string
+        BrowseFlag: string
+        Filter: string
+        StartingIndex: string
+        RequestedCount: string
+        SortCriteria: string
+      }): Promise<{
+        Result: string
+        NumberReturned: string
+        TotalMatches: string
+        UpdateID: string
+      }>
+    }
   }
 
   export class AsyncDeviceDiscovery {
