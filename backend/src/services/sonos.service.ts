@@ -124,12 +124,39 @@ export class SonosService extends EventEmitter {
     await this.ensureDeviceReady();
 
     try {
-      console.log(`Playing URL: ${url}`);
-      await this.device!.play(url);
+      // Favorites and queued content need special handling
+      if (this.isFavoriteUri(url)) {
+        console.log(`Playing favorite/queued content: ${url}`);
+        await this.playFavorite(url);
+      } else {
+        // Direct playback for simple URIs (spotify:track:xxx, etc.)
+        console.log(`Playing URL directly: ${url}`);
+        await this.device!.play(url);
+      }
     } catch (error) {
       console.error('Error playing URL:', error);
       throw this.formatError(error);
     }
+  }
+
+  private isFavoriteUri(url: string): boolean {
+    // Favorites and containers need to be queued
+    return (
+      url.startsWith('x-rincon-cpcontainer:') ||
+      url.startsWith('x-sonosapi-stream:') ||
+      url.startsWith('x-sonosapi-radio:') ||
+      url.startsWith('x-rincon-playlist:')
+    );
+  }
+
+  private async playFavorite(url: string): Promise<void> {
+    // Clear queue and add favorite
+    await this.device!.flush();
+    await this.device!.queue(url);
+
+    // Select queue as source and play
+    await this.device!.selectQueue();
+    await this.device!.play();
   }
 
   async play(): Promise<void> {

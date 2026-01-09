@@ -12,6 +12,9 @@ declare module 'sonos' {
     currentTrack(): Promise<any>
     getCurrentState(): Promise<string>
     getFavorites(): Promise<{ items: Array<{ title: string; uri: string }> }>
+    flush(): Promise<any>
+    queue(uri: string | { uri: string; metadata: string }, position?: number): Promise<any>
+    selectQueue(): Promise<any>
   }
 
   export class AsyncDeviceDiscovery {
