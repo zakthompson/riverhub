@@ -19,13 +19,11 @@ watchexec -r \
   'rsync -az --delete \
     --filter="protect backend/node_modules/" \
     --filter="protect backend/dist/" \
-    --filter="protect backend/.env" \
     --filter="protect backend/lib/rfid/venv/" \
     --filter="protect backend/lib/rfid/__pycache__/" \
     --filter="protect frontend/node_modules/" \
     --filter="protect frontend/dist/" \
     --filter="protect frontend/.vite/" \
-    --filter="protect frontend/.env" \
     --exclude=node_modules/ \
     --exclude=venv/ \
     --exclude=dist/ \
@@ -33,4 +31,5 @@ watchexec -r \
     --exclude="*.log" \
     --exclude=__pycache__/ \
     --exclude=.DS_Store \
+    --exclude=.env \
     ./ rpi:/home/river/riverhub/'

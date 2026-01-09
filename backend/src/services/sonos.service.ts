@@ -98,12 +98,49 @@ export class SonosService extends EventEmitter {
     }
   }
 
+  /**
+   * Convert Apple Music URLs to Sonos-compatible format
+   * Based on: https://github.com/SoCo/SoCo/issues/812#issuecomment-786573041
+   */
+  private convertAppleMusicUrl(url: string): string {
+    // Match Apple Music URLs: https://music.apple.com/{country}/album/{name}/{id}
+    // or: https://music.apple.com/album/{id}
+    const albumMatch = url.match(/music\.apple\.com\/(?:[a-z]{2}\/)?album\/(?:[\w-]+\/)?(\d+)/i)
+    if (albumMatch) {
+      const albumId = albumMatch[1]
+      return `x-sonos-http:album:${albumId}.mp4?sid=204&flags=8224&sn=1`
+    }
+
+    // Match playlist URLs: https://music.apple.com/{country}/playlist/{name}/{id}
+    const playlistMatch = url.match(/music\.apple\.com\/(?:[a-z]{2}\/)?playlist\/(?:[\w-]+\/)?(\d+)/i)
+    if (playlistMatch) {
+      const playlistId = playlistMatch[1]
+      return `x-sonos-http:playlist:${playlistId}.mp4?sid=204&flags=8224&sn=1`
+    }
+
+    // Match song URLs: https://music.apple.com/{country}/song/{name}/{id}
+    const songMatch = url.match(/music\.apple\.com\/(?:[a-z]{2}\/)?song\/(?:[\w-]+\/)?(\d+)/i)
+    if (songMatch) {
+      const songId = songMatch[1]
+      return `x-sonos-http:song:${songId}.mp4?sid=204&flags=8224&sn=1`
+    }
+
+    // If not Apple Music, return as-is (for Spotify URIs, direct streams, etc.)
+    return url
+  }
+
   async playUrl(url: string): Promise<void> {
     await this.ensureDeviceReady()
 
     try {
+      // Convert Apple Music URLs to Sonos-compatible format
+      const sonosUrl = this.convertAppleMusicUrl(url)
       console.log(`Playing URL: ${url}`)
-      await this.device!.play(url)
+      if (sonosUrl !== url) {
+        console.log(`  Converted to: ${sonosUrl}`)
+      }
+
+      await this.device!.play(sonosUrl)
     } catch (error) {
       console.error('Error playing URL:', error)
       throw this.formatError(error)
