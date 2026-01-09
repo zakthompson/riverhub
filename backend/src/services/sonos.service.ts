@@ -27,11 +27,9 @@ export class SonosService extends EventEmitter {
     try {
       console.log(`Discovering Sonos speakers on network...`)
 
-      // Create discovery instance
+      // Create discovery instance and discover all devices
       const discovery = new AsyncDeviceDiscovery()
-
-      // Discover all Sonos devices on the network
-      const devices = await discovery.discover({
+      const devices = await discovery.discoverMultiple({
         timeout: 5000,
       })
 
