@@ -23,6 +23,7 @@ export const config = {
 
   paths: {
     rfidService: path.join(__dirname, '../lib/rfid/service.py'),
+    rfidVenvPython: path.join(__dirname, '../lib/rfid/venv/bin/python3'),
     staticFiles: path.join(__dirname, '../../frontend/dist'),
   },
 }

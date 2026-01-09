@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events'
 import { spawn, ChildProcess } from 'child_process'
+import { existsSync } from 'fs'
 import { config } from '../config'
 import type { RFIDEvent, RFIDCommand } from '../types/rfid.types'
 
@@ -16,7 +17,29 @@ export class RFIDService extends EventEmitter {
 
     console.log(`Starting RFID service in ${config.rfid.mode} mode...`)
 
-    this.process = spawn('python3', [config.paths.rfidService], {
+    // Use venv Python if in real mode and venv exists, otherwise use system python3
+    let pythonCmd = 'python3'
+
+    if (config.rfid.mode === 'real') {
+      if (existsSync(config.paths.rfidVenvPython)) {
+        pythonCmd = config.paths.rfidVenvPython
+        console.log(`Using venv Python: ${pythonCmd}`)
+      } else {
+        console.warn(
+          'Warning: Python venv not found at',
+          config.paths.rfidVenvPython,
+        )
+        console.warn(
+          'Run dev.sh to set up dependencies, or manually create venv:',
+        )
+        console.warn('  cd backend/lib/rfid && python3 -m venv venv')
+        console.warn('  venv/bin/pip install -r requirements.txt')
+      }
+    } else {
+      console.log(`Using system Python: ${pythonCmd}`)
+    }
+
+    this.process = spawn(pythonCmd, [config.paths.rfidService], {
       stdio: ['pipe', 'pipe', 'pipe'],
       env: {
         ...process.env,

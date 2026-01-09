@@ -103,19 +103,23 @@ install_backend_deps() {
 
     # Install Python dependencies if on Pi
     if [ "$PLATFORM" = "pi" ]; then
-        if [ ! -d "lib/rfid/venv" ]; then
+        cd "$BACKEND_DIR/lib/rfid"
+
+        if [ ! -d "venv" ]; then
             log "Creating Python virtual environment..."
-            cd "$BACKEND_DIR/lib/rfid"
             python3 -m venv venv
             log_success "✓ Virtual environment created"
         fi
 
-        cd "$BACKEND_DIR/lib/rfid"
         if [ ! -f "venv/.deps_installed" ] || [ "requirements.txt" -nt "venv/.deps_installed" ]; then
             log "Installing Python dependencies..."
-            venv/bin/pip install -q -r requirements.txt
-            touch venv/.deps_installed
-            log_success "✓ Python dependencies installed"
+            if venv/bin/pip install -r requirements.txt; then
+                touch venv/.deps_installed
+                log_success "✓ Python dependencies installed"
+            else
+                log_error "Failed to install Python dependencies"
+                exit 1
+            fi
         else
             log "Python dependencies up to date"
         fi
