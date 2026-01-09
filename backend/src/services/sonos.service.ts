@@ -1,8 +1,6 @@
 import { EventEmitter } from 'events'
-import { DeviceDiscovery, Sonos } from 'sonos'
+import { AsyncDeviceDiscovery, Sonos } from 'sonos'
 import type { TrackInfo, PlaybackState, SonosError, SonosState } from '../types/sonos.types'
-
-const { discoverMultiple } = DeviceDiscovery
 
 const POLLING_INTERVAL = 1500 // 1.5 seconds
 
@@ -29,8 +27,11 @@ export class SonosService extends EventEmitter {
     try {
       console.log(`Discovering Sonos speakers on network...`)
 
+      // Create discovery instance
+      const discovery = new AsyncDeviceDiscovery()
+
       // Discover all Sonos devices on the network
-      const devices = await discoverMultiple({
+      const devices = await discovery.discover({
         timeout: 5000,
       })
 
