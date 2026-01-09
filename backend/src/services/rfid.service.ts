@@ -17,26 +17,23 @@ export class RFIDService extends EventEmitter {
 
     console.log(`Starting RFID service in ${config.rfid.mode} mode...`)
 
-    // Use venv Python if in real mode and venv exists, otherwise use system python3
+    // Use venv Python if available (needed for dependencies like dotenv)
     let pythonCmd = 'python3'
 
-    if (config.rfid.mode === 'real') {
-      if (existsSync(config.paths.rfidVenvPython)) {
-        pythonCmd = config.paths.rfidVenvPython
-        console.log(`Using venv Python: ${pythonCmd}`)
-      } else {
-        console.warn(
-          'Warning: Python venv not found at',
-          config.paths.rfidVenvPython,
-        )
-        console.warn(
-          'Run dev.sh to set up dependencies, or manually create venv:',
-        )
-        console.warn('  cd backend/lib/rfid && python3 -m venv venv')
-        console.warn('  venv/bin/pip install -r requirements.txt')
-      }
+    if (existsSync(config.paths.rfidVenvPython)) {
+      pythonCmd = config.paths.rfidVenvPython
+      console.log(`Using venv Python: ${pythonCmd}`)
     } else {
-      console.log(`Using system Python: ${pythonCmd}`)
+      console.warn(
+        'Warning: Python venv not found at',
+        config.paths.rfidVenvPython,
+      )
+      console.warn(
+        'Run dev.sh to set up dependencies, or manually create venv:',
+      )
+      console.warn('  cd backend/lib/rfid && python3 -m venv venv')
+      console.warn('  venv/bin/pip install -r requirements.txt')
+      console.log(`Falling back to system Python: ${pythonCmd}`)
     }
 
     this.process = spawn(pythonCmd, [config.paths.rfidService], {

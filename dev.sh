@@ -94,7 +94,7 @@ check_prerequisites() {
         missing=1
     fi
 
-    if [ "$PLATFORM" = "pi" ] && ! command -v python3 &> /dev/null; then
+    if ! command -v python3 &> /dev/null; then
         log_error "Python 3 not found. Please install Python 3"
         missing=1
     fi
@@ -117,28 +117,26 @@ install_backend_deps() {
         log "Backend dependencies up to date"
     fi
 
-    # Install Python dependencies if on Pi
-    if [ "$PLATFORM" = "pi" ]; then
-        cd "$BACKEND_DIR/lib/rfid"
+    # Install Python dependencies (needed for both Pi and dev machines)
+    cd "$BACKEND_DIR/lib/rfid"
 
-        if [ ! -d "venv" ]; then
-            log "Creating Python virtual environment..."
-            python3 -m venv venv
-            log_success "✓ Virtual environment created"
-        fi
+    if [ ! -d "venv" ]; then
+        log "Creating Python virtual environment..."
+        python3 -m venv venv
+        log_success "✓ Virtual environment created"
+    fi
 
-        if [ ! -f "venv/.deps_installed" ] || [ "requirements.txt" -nt "venv/.deps_installed" ]; then
-            log "Installing Python dependencies..."
-            if venv/bin/pip install -r requirements.txt; then
-                touch venv/.deps_installed
-                log_success "✓ Python dependencies installed"
-            else
-                log_error "Failed to install Python dependencies"
-                exit 1
-            fi
+    if [ ! -f "venv/.deps_installed" ] || [ "requirements.txt" -nt "venv/.deps_installed" ]; then
+        log "Installing Python dependencies..."
+        if venv/bin/pip install -r requirements.txt; then
+            touch venv/.deps_installed
+            log_success "✓ Python dependencies installed"
         else
-            log "Python dependencies up to date"
+            log_error "Failed to install Python dependencies"
+            exit 1
         fi
+    else
+        log "Python dependencies up to date"
     fi
 }
 
