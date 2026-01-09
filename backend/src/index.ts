@@ -82,19 +82,36 @@ async function main() {
   const shutdown = async () => {
     console.log('\n🛑 Shutting down gracefully...')
 
-    sonos.stopPolling()
-    rfid.stop()
-
-    server.close(() => {
-      console.log('Server closed')
-      process.exit(0)
-    })
-
-    // Force exit after 10 seconds
-    setTimeout(() => {
-      console.error('Forced shutdown after timeout')
+    // Set timeout for forced exit
+    const forceExitTimeout = setTimeout(() => {
+      console.error('⚠️  Forced shutdown after timeout')
       process.exit(1)
-    }, 10000)
+    }, 5000)
+
+    try {
+      // Stop services
+      console.log('Stopping Sonos polling...')
+      sonos.stopPolling()
+
+      console.log('Stopping RFID service...')
+      await rfid.stop()
+
+      // Close server
+      await new Promise<void>((resolve) => {
+        server.close(() => {
+          console.log('Server closed')
+          resolve()
+        })
+      })
+
+      clearTimeout(forceExitTimeout)
+      console.log('✅ Shutdown complete')
+      process.exit(0)
+    } catch (error) {
+      console.error('Error during shutdown:', error)
+      clearTimeout(forceExitTimeout)
+      process.exit(1)
+    }
   }
 
   process.on('SIGTERM', shutdown)

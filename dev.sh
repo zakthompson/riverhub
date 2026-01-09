@@ -55,9 +55,25 @@ detect_platform() {
 # Cleanup function
 cleanup() {
     log "Shutting down..."
-    # Kill all child processes
-    jobs -p | xargs -r kill 2>/dev/null || true
-    wait 2>/dev/null || true
+
+    # Get all background job PIDs
+    local pids=$(jobs -p)
+
+    if [ -n "$pids" ]; then
+        # Send SIGTERM to all processes
+        echo "$pids" | xargs kill 2>/dev/null || true
+
+        # Wait up to 3 seconds for graceful shutdown
+        local count=0
+        while [ $count -lt 3 ] && jobs %% >/dev/null 2>&1; do
+            sleep 1
+            count=$((count + 1))
+        done
+
+        # Force kill any remaining processes
+        echo "$pids" | xargs kill -9 2>/dev/null || true
+    fi
+
     log_success "Cleanup complete"
     exit 0
 }

@@ -100,19 +100,42 @@ export class RFIDService extends EventEmitter {
     console.log('RFID service started successfully')
   }
 
-  stop(): void {
-    this.isRestarting = true
+  stop(): Promise<void> {
+    return new Promise((resolve) => {
+      this.isRestarting = true
 
-    if (this.restartTimeout) {
-      clearTimeout(this.restartTimeout)
-      this.restartTimeout = null
-    }
+      if (this.restartTimeout) {
+        clearTimeout(this.restartTimeout)
+        this.restartTimeout = null
+      }
 
-    if (this.process) {
+      if (!this.process) {
+        resolve()
+        return
+      }
+
       console.log('Stopping RFID service...')
+
+      // Set up exit handler
+      const onExit = () => {
+        this.process = null
+        console.log('RFID service stopped')
+        resolve()
+      }
+
+      this.process.once('exit', onExit)
+
+      // Try graceful shutdown first
       this.process.kill('SIGTERM')
-      this.process = null
-    }
+
+      // Force kill after 2 seconds if still running
+      setTimeout(() => {
+        if (this.process) {
+          console.log('Force killing RFID service...')
+          this.process.kill('SIGKILL')
+        }
+      }, 2000)
+    })
   }
 
   sendCommand(command: RFIDCommand): void {
