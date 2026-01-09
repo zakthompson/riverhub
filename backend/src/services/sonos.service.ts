@@ -150,13 +150,30 @@ export class SonosService extends EventEmitter {
   }
 
   private async playFavorite(url: string): Promise<void> {
-    // Clear queue and add favorite
-    await this.device!.flush();
-    await this.device!.queue(url);
+    // For library playlists and other containers, use setAVTransportURI with proper metadata
+    const metadata = this.generateContainerMetadata(url);
 
-    // Select queue as source and play
-    await this.device!.selectQueue();
-    await this.device!.play();
+    await this.device!.setAVTransportURI({
+      uri: url,
+      metadata: metadata,
+      onlySetUri: false, // Will automatically call play()
+    });
+  }
+
+  private generateContainerMetadata(uri: string): string {
+    // Extract the container ID from the URI
+    // Example: x-rincon-cpcontainer:1006206clibraryplaylist%3Ap.VJabuoWQJ44?sid=204&flags=8300&sn=1
+    const match = uri.match(/^x-rincon-cpcontainer:(.*?)(\?|$)/);
+    const containerId = match ? match[1] : uri.replace('x-rincon-cpcontainer:', '');
+
+    // Generate DIDL-Lite metadata for container
+    return `<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">` +
+      `<container id="${containerId}" parentID="" restricted="true">` +
+      `<dc:title></dc:title>` +
+      `<upnp:class>object.container.playlistContainer</upnp:class>` +
+      `<desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/"></desc>` +
+      `</container>` +
+      `</DIDL-Lite>`;
   }
 
   async play(): Promise<void> {

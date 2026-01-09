@@ -15,6 +15,11 @@ declare module 'sonos' {
     flush(): Promise<any>
     queue(uri: string | { uri: string; metadata: string }, position?: number): Promise<any>
     selectQueue(): Promise<any>
+    setAVTransportURI(options: string | {
+      uri: string
+      metadata: string
+      onlySetUri?: boolean
+    }): Promise<any>
   }
 
   export class AsyncDeviceDiscovery {
