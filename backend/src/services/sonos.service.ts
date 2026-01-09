@@ -53,7 +53,7 @@ export class SonosService extends EventEmitter {
       }
 
       // If we get here, the speaker wasn't found
-      const availableNames = await Promise.all(devices.map((d) => d.getName()));
+      const availableNames = await Promise.all(devices.map((d: Sonos) => d.getName()));
       throw new Error(
         `Speaker "${this.speakerName}" not found. Available speakers: ${availableNames.join(', ')}`
       );

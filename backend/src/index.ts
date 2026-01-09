@@ -4,6 +4,7 @@ import path from 'path'
 import { config } from './config'
 import { RFIDService } from './services/rfid.service'
 import { SonosService } from './services/sonos.service'
+import { CardMappingService } from './services/card-mapping.service'
 import { IntegrationService } from './services/integration.service'
 import { WSServer } from './websocket'
 
@@ -34,6 +35,78 @@ async function main() {
         clients: ws.getClientCount(),
       },
     })
+  })
+
+  // JSON body parser
+  app.use(express.json())
+
+  // Card mappings endpoints
+  app.get('/api/cards', (req, res) => {
+    try {
+      const mappings = cardMappings.getAllMappings()
+      res.json(mappings)
+    } catch (error) {
+      console.error('Error fetching card mappings:', error)
+      res.status(500).json({
+        error: 'Failed to fetch card mappings',
+        message: error instanceof Error ? error.message : String(error),
+      })
+    }
+  })
+
+  app.post('/api/cards/:cardId', async (req, res) => {
+    try {
+      const { cardId } = req.params
+      const { type, data, name } = req.body
+
+      if (!type || !data) {
+        res.status(400).json({
+          error: 'Missing required fields',
+          message: 'Both "type" and "data" are required',
+        })
+        return
+      }
+
+      await cardMappings.setMapping(cardId, type, data, name)
+      res.json({
+        success: true,
+        cardId,
+        type,
+        name,
+      })
+    } catch (error) {
+      console.error('Error setting card mapping:', error)
+      res.status(500).json({
+        error: 'Failed to set card mapping',
+        message: error instanceof Error ? error.message : String(error),
+      })
+    }
+  })
+
+  app.delete('/api/cards/:cardId', async (req, res) => {
+    try {
+      const { cardId } = req.params
+      const deleted = await cardMappings.deleteMapping(cardId)
+
+      if (!deleted) {
+        res.status(404).json({
+          error: 'Card not found',
+          message: `No mapping exists for card ${cardId}`,
+        })
+        return
+      }
+
+      res.json({
+        success: true,
+        cardId,
+      })
+    } catch (error) {
+      console.error('Error deleting card mapping:', error)
+      res.status(500).json({
+        error: 'Failed to delete card mapping',
+        message: error instanceof Error ? error.message : String(error),
+      })
+    }
   })
 
   // Sonos favorites endpoint
@@ -69,11 +142,15 @@ async function main() {
   // Initialize services
   console.log('\n📦 Initializing services...')
 
-  // 1. RFID Service
+  // 1. Card Mapping Service
+  const cardMappings = new CardMappingService()
+  await cardMappings.load()
+
+  // 2. RFID Service
   const rfid = new RFIDService()
   await rfid.start()
 
-  // 2. Sonos Service
+  // 3. Sonos Service
   const sonos = new SonosService(config.sonos.speakerName)
   try {
     await sonos.initialize()
@@ -82,11 +159,11 @@ async function main() {
     console.log('Continuing without Sonos - will retry on first playback attempt')
   }
 
-  // 3. WebSocket Server
+  // 4. WebSocket Server
   const ws = new WSServer(server)
 
-  // 4. Integration Service (connects everything)
-  new IntegrationService(rfid, sonos, ws)
+  // 5. Integration Service (connects everything)
+  new IntegrationService(rfid, sonos, cardMappings, ws)
 
   // Start server
   server.listen(config.port, () => {

@@ -4,8 +4,11 @@ import type { TrackInfo, PlaybackState } from './sonos.types'
 export interface CardReadMessage {
   type: 'card_read'
   cardId: string
-  data: string
+  data: string | object | null
+  actionType?: string
+  name?: string
   timestamp: number
+  error?: string
 }
 
 export interface SonosStateMessage {
@@ -25,7 +28,7 @@ export interface WriteCompleteMessage {
 
 export interface ErrorMessage {
   type: 'error'
-  source: 'sonos' | 'rfid' | 'system'
+  source: string // 'sonos', 'rfid', 'system', or any custom integration type
   message: string
   code?: string
 }

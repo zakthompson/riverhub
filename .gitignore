@@ -38,6 +38,9 @@ pnpm-debug.log*
 # Frontend build
 frontend/dist/
 
+# Backend data
+backend/card-mappings.json
+
 # Environment variables
 .env
 .env.local

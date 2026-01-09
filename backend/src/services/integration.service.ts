@@ -1,5 +1,6 @@
 import type { RFIDService } from './rfid.service'
 import type { SonosService } from './sonos.service'
+import type { CardMappingService } from './card-mapping.service'
 import type { WSServer } from '../websocket'
 import type { RFIDEvent } from '../types/rfid.types'
 import type { SonosState } from '../types/sonos.types'
@@ -10,6 +11,7 @@ export class IntegrationService {
   constructor(
     private rfid: RFIDService,
     private sonos: SonosService,
+    private cardMappings: CardMappingService,
     private ws: WSServer,
   ) {
     this.setupEventHandlers()
@@ -39,29 +41,37 @@ export class IntegrationService {
 
   private async handleRFIDEvent(event: RFIDEvent): Promise<void> {
     if (event.type === 'card_read') {
-      console.log(`Card read: ${event.cardId} -> ${event.data}`)
+      console.log(`Card read: ${event.cardId}`)
+
+      // Look up card mapping
+      const mapping = this.cardMappings.getMapping(event.cardId)
+
+      if (!mapping) {
+        console.warn(`No mapping found for card ${event.cardId}`)
+        this.ws.broadcast({
+          type: 'card_read',
+          cardId: event.cardId,
+          data: null,
+          timestamp: event.timestamp,
+          error: 'Card not registered',
+        })
+        return
+      }
+
+      console.log(`Card ${event.cardId} mapped to ${mapping.type} action`)
 
       // Broadcast card read to frontend
       this.ws.broadcast({
         type: 'card_read',
         cardId: event.cardId,
-        data: event.data,
+        data: mapping.data,
+        actionType: mapping.type,
+        name: mapping.name,
         timestamp: event.timestamp,
       })
 
-      // Auto-play on Sonos if data looks like a URL
-      if (event.data && this.isValidPlaylistUrl(event.data)) {
-        try {
-          await this.sonos.playUrl(event.data)
-        } catch (error) {
-          console.error('Failed to play URL on Sonos:', error)
-          this.ws.broadcast({
-            type: 'error',
-            source: 'sonos',
-            message: error instanceof Error ? error.message : String(error),
-          })
-        }
-      }
+      // Execute action based on type
+      await this.executeCardAction(mapping)
     } else if (event.type === 'write_complete') {
       // Forward write completion to frontend
       this.ws.broadcast({
@@ -75,6 +85,38 @@ export class IntegrationService {
         type: 'error',
         source: 'rfid',
         message: event.message,
+      })
+    }
+  }
+
+  private async executeCardAction(
+    mapping: import('../types/card-mapping.types').CardMapping,
+  ): Promise<void> {
+    try {
+      switch (mapping.type) {
+        case 'sonos':
+          // Play Sonos URI
+          if (typeof mapping.data === 'string') {
+            await this.sonos.playUrl(mapping.data)
+          } else {
+            console.error('Invalid Sonos data format - expected string')
+          }
+          break
+
+        // Future integrations will go here:
+        // case 'lights':
+        //   await this.lights.setScene(mapping.data)
+        //   break
+
+        default:
+          console.warn(`Unknown action type: ${mapping.type}`)
+      }
+    } catch (error) {
+      console.error(`Failed to execute ${mapping.type} action:`, error)
+      this.ws.broadcast({
+        type: 'error',
+        source: mapping.type,
+        message: error instanceof Error ? error.message : String(error),
       })
     }
   }
@@ -129,17 +171,4 @@ export class IntegrationService {
     }
   }
 
-  private isValidPlaylistUrl(url: string): boolean {
-    // Check for Spotify URIs or URLs
-    if (url.startsWith('spotify:')) return true
-    if (url.includes('spotify.com')) return true
-
-    // Check for Apple Music URLs
-    if (url.includes('music.apple.com')) return true
-
-    // Check for generic http(s) URLs
-    if (url.startsWith('http://') || url.startsWith('https://')) return true
-
-    return false
-  }
 }
