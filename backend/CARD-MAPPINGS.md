@@ -17,8 +17,8 @@ The card mapping system allows you to assign actions to RFID cards without writi
     "123456789": {
       "id": "123456789",
       "type": "sonos",
-      "data": "x-rincon-cpcontainer:1006206clibraryplaylist%3Ap.VJabuoWQJ44?sid=204&flags=8300&sn=1",
-      "name": "The Sound of Music"
+      "data": "The Sound of Music",
+      "name": "River's Calm Music"
     }
   }
 }
@@ -29,9 +29,10 @@ The card mapping system allows you to assign actions to RFID cards without writi
 - **id**: Card's unique identifier (matches the key)
 - **type**: Integration type - `"sonos"`, `"lights"`, etc.
 - **data**: Action payload (format depends on type)
-  - For Sonos: Favorite URI string
+  - For Sonos Favorites: The favorite's **title** (not URI) - simpler and more reliable
+  - For Sonos URIs: Full URI string (spotify:track:xxx, http://..., etc.)
   - For future integrations: Could be object with settings
-- **name**: (Optional) Friendly name for the card
+- **name**: (Optional) Friendly display name for the card (can differ from data)
 
 ## Usage
 
@@ -48,11 +49,13 @@ Returns:
   "favorites": [
     {
       "title": "The Sound of Music",
-      "uri": "x-rincon-cpcontainer:1006206clibraryplaylist%3Ap.VJabuoWQJ44?sid=204&flags=8300&sn=1"
+      "uri": "x-rincon-cpcontainer:..."
     }
   ]
 }
 ```
+
+Copy the **title** (not the URI) - you'll use this in your card mapping.
 
 ### 2. Tap an Unmapped Card
 
@@ -82,8 +85,8 @@ curl -X POST http://localhost:8765/api/cards/123456789 \
   -H "Content-Type: application/json" \
   -d '{
     "type": "sonos",
-    "data": "x-rincon-cpcontainer:1006206clibraryplaylist%3Ap.VJabuoWQJ44?sid=204&flags=8300&sn=1",
-    "name": "The Sound of Music"
+    "data": "The Sound of Music",
+    "name": "River'\''s Calm Music"
   }'
 ```
 
@@ -95,14 +98,16 @@ curl -X POST http://localhost:8765/api/cards/123456789 \
     "123456789": {
       "id": "123456789",
       "type": "sonos",
-      "data": "x-rincon-cpcontainer:1006206clibraryplaylist%3Ap.VJabuoWQJ44?sid=204&flags=8300&sn=1",
-      "name": "The Sound of Music"
+      "data": "The Sound of Music",
+      "name": "River's Calm Music"
     }
   }
 }
 ```
 
-Save the file - the backend loads it on startup.
+**Important:** Use the exact **title** from the favorites list (case-insensitive matching).
+
+Save the file and restart the backend (it loads mappings on startup).
 
 ### 4. Use the Card
 

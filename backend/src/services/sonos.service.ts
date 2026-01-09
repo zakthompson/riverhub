@@ -120,6 +120,34 @@ export class SonosService extends EventEmitter {
     }
   }
 
+  /**
+   * Play a favorite by its title
+   * This fetches all favorites and plays the one matching the title
+   */
+  async playFavoriteByTitle(title: string): Promise<void> {
+    await this.ensureDeviceReady();
+
+    try {
+      const favorites = await this.device!.getFavorites();
+      const favorite = favorites.items?.find(
+        (f) => f.title.toLowerCase() === title.toLowerCase()
+      );
+
+      if (!favorite) {
+        throw new Error(`Favorite "${title}" not found`);
+      }
+
+      console.log(`Playing favorite: ${favorite.title}`);
+
+      // Try using the URI directly with setAVTransportURI (no metadata)
+      // Let Sonos figure out the metadata
+      await this.device!.setAVTransportURI(favorite.uri);
+    } catch (error) {
+      console.error('Error playing favorite by title:', error);
+      throw this.formatError(error);
+    }
+  }
+
   async playUrl(url: string): Promise<void> {
     await this.ensureDeviceReady();
 

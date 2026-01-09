@@ -95,9 +95,15 @@ export class IntegrationService {
     try {
       switch (mapping.type) {
         case 'sonos':
-          // Play Sonos URI
+          // Play Sonos content
           if (typeof mapping.data === 'string') {
-            await this.sonos.playUrl(mapping.data)
+            // Check if it's a URI or a favorite title
+            if (this.isUri(mapping.data)) {
+              await this.sonos.playUrl(mapping.data)
+            } else {
+              // Treat as favorite title
+              await this.sonos.playFavoriteByTitle(mapping.data)
+            }
           } else {
             console.error('Invalid Sonos data format - expected string')
           }
@@ -119,6 +125,17 @@ export class IntegrationService {
         message: error instanceof Error ? error.message : String(error),
       })
     }
+  }
+
+  private isUri(str: string): boolean {
+    // Check if string looks like a URI (has a scheme)
+    return (
+      str.startsWith('x-') ||
+      str.startsWith('http://') ||
+      str.startsWith('https://') ||
+      str.startsWith('spotify:') ||
+      str.includes('://')
+    )
   }
 
   private async handleFrontendMessage(
