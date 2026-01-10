@@ -152,7 +152,6 @@ async def get_cards():
         return {
             "cards": {
                 card_id: {
-                    "id": mapping.id,
                     "type": mapping.type,
                     "data": mapping.data,
                     "name": mapping.name,

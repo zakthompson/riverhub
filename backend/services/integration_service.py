@@ -85,11 +85,25 @@ class IntegrationService:
             if mapping.type == "sonos":
                 # Play Sonos content
                 if isinstance(mapping.data, str):
-                    # Check if it's a URI or a favorite title
-                    if self._is_uri(mapping.data):
+                    # Parse prefix (url: or title:)
+                    if ":" in mapping.data and not self._is_uri(mapping.data):
+                        prefix, _, value = mapping.data.partition(":")
+                        if prefix == "url":
+                            logger.info(f"Playing Sonos URL: {value}")
+                            await self.sonos.play_url(value)
+                        elif prefix == "title":
+                            logger.info(f"Playing Sonos favorite by title: {value}")
+                            await self.sonos.play_favorite_by_title(value)
+                        else:
+                            logger.warning(f"Unknown prefix '{prefix}', treating as favorite title")
+                            await self.sonos.play_favorite_by_title(mapping.data)
+                    # Legacy support: check if it's a URI or a favorite title
+                    elif self._is_uri(mapping.data):
+                        logger.info(f"Playing Sonos URL (legacy): {mapping.data}")
                         await self.sonos.play_url(mapping.data)
                     else:
-                        # Treat as favorite title
+                        # Treat as favorite title (legacy)
+                        logger.info(f"Playing Sonos favorite by title (legacy): {mapping.data}")
                         await self.sonos.play_favorite_by_title(mapping.data)
                 else:
                     logger.error("Invalid Sonos data format - expected string")

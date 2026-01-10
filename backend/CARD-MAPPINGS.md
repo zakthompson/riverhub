@@ -15,9 +15,8 @@ The card mapping system allows you to assign actions to RFID cards without writi
 {
   "cards": {
     "123456789": {
-      "id": "123456789",
       "type": "sonos",
-      "data": "The Sound of Music",
+      "data": "title:The Sound of Music",
       "name": "River's Calm Music"
     }
   }
@@ -26,13 +25,14 @@ The card mapping system allows you to assign actions to RFID cards without writi
 
 ### Fields
 
-- **id**: Card's unique identifier (matches the key)
 - **type**: Integration type - `"sonos"`, `"lights"`, etc.
-- **data**: Action payload (format depends on type)
-  - For Sonos Favorites: The favorite's **title** (not URI) - simpler and more reliable
-  - For Sonos URIs: Full URI string (spotify:track:xxx, http://..., etc.)
+- **data**: Action payload with prefix (format depends on type)
+  - For Sonos: Use `"title:..."` or `"url:..."` prefix
+    - `"title:Calm River"` - Play Sonos Favorite by title
+    - `"url:https://music.apple.com/..."` - Play URL directly
+    - `"url:spotify:playlist:..."` - Play Spotify playlist
   - For future integrations: Could be object with settings
-- **name**: (Optional) Friendly display name for the card (can differ from data)
+- **name**: (Optional) Friendly display name for the card
 
 ## Usage
 
@@ -78,34 +78,52 @@ The frontend receives:
 
 ### 3. Register the Card
 
-**Option A: Via API**
+**Option A: Via API (Favorite by Title)**
 
 ```bash
 curl -X POST http://localhost:8765/api/cards/123456789 \
   -H "Content-Type: application/json" \
   -d '{
     "type": "sonos",
-    "data": "The Sound of Music",
+    "data": "title:The Sound of Music",
     "name": "River'\''s Calm Music"
   }'
 ```
 
-**Option B: Manually edit `card-mappings.json`**
+**Option B: Via API (URL)**
+
+```bash
+curl -X POST http://localhost:8765/api/cards/123456789 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "sonos",
+    "data": "url:https://music.apple.com/album/1715961558",
+    "name": "Apple Music Album"
+  }'
+```
+
+**Option C: Manually edit `card-mappings.json`**
 
 ```json
 {
   "cards": {
     "123456789": {
-      "id": "123456789",
       "type": "sonos",
-      "data": "The Sound of Music",
+      "data": "title:The Sound of Music",
       "name": "River's Calm Music"
+    },
+    "987654321": {
+      "type": "sonos",
+      "data": "url:https://music.apple.com/album/1715961558",
+      "name": "Apple Music Album"
     }
   }
 }
 ```
 
-**Important:** Use the exact **title** from the favorites list (case-insensitive matching).
+**Important:**
+- For favorites: Use `title:` prefix with exact title from favorites list (case-insensitive)
+- For URLs: Use `url:` prefix with full URL (Apple Music, Spotify, etc.)
 
 Save the file and restart the backend (it loads mappings on startup).
 
@@ -136,7 +154,16 @@ Create or update a card mapping.
 ```json
 {
   "type": "sonos",
-  "data": "x-rincon-cpcontainer:...",
+  "data": "title:Calm River",
+  "name": "Optional Name"
+}
+```
+
+Or for URLs:
+```json
+{
+  "type": "sonos",
+  "data": "url:https://music.apple.com/album/1234567",
   "name": "Optional Name"
 }
 ```
@@ -146,8 +173,7 @@ Create or update a card mapping.
 {
   "success": true,
   "cardId": "123456789",
-  "type": "sonos",
-  "name": "Optional Name"
+  "type": "sonos"
 }
 ```
 
@@ -171,24 +197,24 @@ The system is designed to support any integration type:
 {
   "cards": {
     "111111111": {
-      "id": "111111111",
       "type": "sonos",
-      "data": "x-rincon-cpcontainer:..."
+      "data": "title:Calm River",
+      "name": "Music Card"
     },
     "222222222": {
-      "id": "222222222",
       "type": "lights",
       "data": {
         "scene": "bedtime",
         "brightness": 20
-      }
+      },
+      "name": "Bedtime Lights"
     },
     "333333333": {
-      "id": "333333333",
       "type": "routine",
       "data": {
         "actions": ["lights:off", "sonos:pause"]
-      }
+      },
+      "name": "Goodnight Routine"
     }
   }
 }

@@ -10,7 +10,6 @@ logger = logging.getLogger(__name__)
 @dataclass
 class CardMapping:
     """Card mapping configuration"""
-    id: str
     type: str  # 'sonos', 'lights', etc.
     data: Union[str, dict]
     name: Optional[str] = None
@@ -77,7 +76,6 @@ class CardMappingService:
             await self.load()
 
         self.mappings[card_id] = CardMapping(
-            id=card_id,
             type=type_,
             data=data,
             name=name,
