@@ -1,6 +1,6 @@
 import logging
 import time
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from fastapi import WebSocket
 
 from .rfid_service import RFIDService
@@ -28,6 +28,7 @@ class IntegrationService:
         self.sonos = sonos
         self.card_mappings = card_mappings
         self.ws_manager = ws_manager
+        self.current_card_id: Optional[str] = None
 
     async def setup(self) -> None:
         """Setup event handlers and start services"""
@@ -62,6 +63,23 @@ class IntegrationService:
             )
             return
 
+        # Check if this is the same card as currently playing
+        if self.current_card_id == card_id:
+            logger.info(f"Card {card_id} is already playing, ignoring duplicate tap")
+            await self.ws_manager.broadcast(
+                {
+                    "type": "card_read",
+                    "cardId": card_id,
+                    "data": mapping.data,
+                    "actionType": mapping.type,
+                    "name": mapping.name,
+                    "timestamp": time.time(),
+                    "ignored": True,
+                    "reason": "Already playing",
+                }
+            )
+            return
+
         logger.info(f"Card {card_id} mapped to {mapping.type} action")
 
         # Broadcast card read to frontend
@@ -77,7 +95,14 @@ class IntegrationService:
         )
 
         # Execute action based on type
-        await self.execute_card_action(mapping)
+        try:
+            await self.execute_card_action(mapping)
+            # Only update current card if action executed successfully
+            self.current_card_id = card_id
+            logger.info(f"Set current card to {card_id}")
+        except Exception as error:
+            logger.error(f"Failed to execute action, not updating current card: {error}")
+            raise
 
     async def execute_card_action(self, mapping: Any) -> None:
         """Execute the action configured for a card"""
