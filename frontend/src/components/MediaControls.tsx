@@ -52,13 +52,13 @@ export function MediaControls({
   }
 
   const handleVolumeUp = () => {
-    const newVolume = Math.min(100, displayVolume + 5)
+    const newVolume = Math.min(100, displayVolume + 2)
     setPendingVolume(newVolume)
     onVolumeChange(newVolume)
   }
 
   const handleVolumeDown = () => {
-    const newVolume = Math.max(0, displayVolume - 5)
+    const newVolume = Math.max(0, displayVolume - 2)
     setPendingVolume(newVolume)
     onVolumeChange(newVolume)
   }
