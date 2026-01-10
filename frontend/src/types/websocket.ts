@@ -60,7 +60,7 @@ export interface SonosPlayUrlMessage {
 }
 
 export interface SonosControlMessage {
-  type: 'sonos_play' | 'sonos_pause' | 'sonos_next' | 'sonos_previous'
+  type: 'sonos_play' | 'sonos_pause' | 'sonos_next' | 'sonos_previous' | 'sonos_stop'
 }
 
 export interface SonosVolumeMessage {

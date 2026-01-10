@@ -206,6 +206,9 @@ class IntegrationService:
             elif msg_type == "sonos_pause":
                 await self.sonos.pause()
 
+            elif msg_type == "sonos_stop":
+                await self.sonos.stop()
+
             elif msg_type == "sonos_next":
                 await self.sonos.next()
 

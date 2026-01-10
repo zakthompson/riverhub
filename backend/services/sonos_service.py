@@ -235,6 +235,12 @@ class SonosService:
         await self._ensure_device_ready()
         await asyncio.to_thread(self.speaker.pause)
 
+    async def stop(self) -> None:
+        """Stop playback and clear queue"""
+        await self._ensure_device_ready()
+        await asyncio.to_thread(self.speaker.stop)
+        await asyncio.to_thread(self.speaker.clear_queue)
+
     async def next(self) -> None:
         """Skip to next track"""
         await self._ensure_device_ready()

@@ -7,6 +7,7 @@ interface MediaControlsProps {
   onPause: () => void
   onNext: () => void
   onPrevious: () => void
+  onStop: () => void
   onVolumeChange: (volume: number) => void
 }
 
@@ -16,6 +17,7 @@ export function MediaControls({
   onPause,
   onNext,
   onPrevious,
+  onStop,
   onVolumeChange,
 }: MediaControlsProps) {
   const [pendingIsPlaying, setPendingIsPlaying] = useState<boolean | null>(null)
@@ -66,7 +68,23 @@ export function MediaControls({
   const { currentTrack } = sonosState
 
   return (
-    <div className="flex h-screen items-center justify-center bg-gradient-to-br from-pink-900 via-pink-500 to-pink-900 p-8 text-white">
+    <div className="relative flex h-screen items-center justify-center bg-gradient-to-br from-pink-900 via-pink-500 to-pink-900 p-8 text-white">
+      {/* Back Button */}
+      <button
+        onClick={onStop}
+        className="absolute top-8 left-8 flex h-12 w-12 items-center justify-center rounded-full bg-white/10 backdrop-blur-sm transition-all hover:bg-white/20 active:scale-95"
+        aria-label="Stop and return to clock"
+      >
+        <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M6 18L18 6M6 6l12 12"
+          />
+        </svg>
+      </button>
+
       <div className="flex h-full w-full max-w-6xl items-center gap-12">
         {/* Left Side - Album Art */}
         <div className="flex h-full flex-1 items-center justify-center">
