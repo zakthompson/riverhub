@@ -62,6 +62,7 @@ async def lifespan(app: FastAPI):
     # 1. Card Mapping Service
     card_mapping_service = CardMappingService(CARD_MAPPINGS_FILE)
     await card_mapping_service.load()
+    await card_mapping_service.start_watching()
 
     # 2. RFID Service
     rfid_service = RFIDService(
@@ -97,6 +98,8 @@ async def lifespan(app: FastAPI):
     logger.info("\n🛑 Shutting down gracefully...")
     if integration_service:
         await integration_service.shutdown()
+    if card_mapping_service:
+        await card_mapping_service.stop_watching()
     logger.info("✅ Shutdown complete")
 
 
