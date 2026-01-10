@@ -1,54 +1,60 @@
 # RiverHub Implementation Plan
 
-## Architecture Decision (Updated - Phase 3)
+## Architecture Decision (Updated - Phase 3 Complete)
 
-**Hybrid Node.js + Python Subprocess Architecture**
+**Pure Python Backend with FastAPI**
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│ Node.js Backend (port 8765)                                     │
-│                                                                  │
-│  ┌─────────────┐    ┌─────────────────┐    ┌──────────────┐   │
-│  │  WebSocket  │◄──►│   Integration   │◄──►│    Sonos     │   │
-│  │   Server    │    │     Service     │    │   Service    │   │
-│  └─────────────┘    └────────┬────────┘    └──────────────┘   │
-│                              │                                  │
-│                       ┌──────▼────────┐                         │
-│                       │ RFID Service  │                         │
-│                       │  (spawns ↓)   │                         │
-│                       └───────────────┘                         │
-│                              │                                  │
-│                    ┌─────────▼─────────┐                        │
-│                    │ Python subprocess │                        │
-│                    │ (stdin/stdout)    │                        │
-│                    └─────────┬─────────┘                        │
-└──────────────────────────────┼─────────────────────────────────┘
-                               │                ↕
-                           GPIO/SPI      WebSocket (HTTP)
-                               │                ↕
-                               ↓         React Frontend
-                        RC522 RFID       ┌──────────────┐
-                         Module          │ - UI         │
-                                         │ - useSonos   │
-                                         │ - useWebSocket│
-                                         └──────────────┘
-                                               ↓
-                                         Sonos Speaker
+┌─────────────────────────────────────────────────────────────┐
+│ Python Backend (FastAPI, port 8765)                         │
+│                                                              │
+│  ┌───────────┐    ┌────────────┐    ┌──────────────┐      │
+│  │ WebSocket │◄──►│Integration │◄──►│Sonos Service │      │
+│  │  Manager  │    │  Service   │    │  (SoCo lib)  │      │
+│  │           │    │            │    │(polling 1.5s)│      │
+│  └───────────┘    └─────┬──────┘    └──────────────┘      │
+│                          │                                  │
+│                   ┌──────▼───────┐                          │
+│                   │RFID Service  │                          │
+│                   │(direct import│                          │
+│                   │lib/rfid/)    │                          │
+│                   └──────┬───────┘                          │
+│                          │                                  │
+│  ┌────────────────┐      │       ┌──────────────┐          │
+│  │Card Mapping   │◄─────┴──────►│HTTP API      │          │
+│  │Service        │               │(/health,     │          │
+│  │(JSON file)    │               │ /api/cards,  │          │
+│  │               │               │ /api/fav...) │          │
+│  └───────────────┘               └──────────────┘          │
+└──────────────────────────┬─────────────────────────────────┘
+                           │              ↕
+                       GPIO/SPI    WebSocket (HTTP)
+                           │              ↕
+                           ↓       React Frontend
+                    RC522 RFID     ┌──────────────┐
+                      Module       │- Sonos UI    │
+                                   │- Card write  │
+                                   │- Controls    │
+                                   └──────────────┘
+                                         ↓
+                                   Sonos Speaker
 ```
 
 **Key Principles**:
-- **Node.js** handles: Sonos control, WebSocket server, business logic, integrations
-- **Python subprocess** handles: RFID hardware ONLY (stdin/stdout communication)
-- **React frontend** handles: UI, receiving Sonos state updates, displaying controls
-- **Integration Service** pattern: Reusable for future hardware (lights, sensors, etc.)
+- **Python + FastAPI** handles: Sonos control (SoCo), RFID hardware, WebSocket server, HTTP API
+- **Direct RFID import**: No subprocess communication needed
+- **React frontend** handles: UI, displaying Sonos state, user interactions
+- **Integration Service** pattern: Reusable orchestration for future hardware (lights, sensors, etc.)
+- **Pure Python** backend: Simpler deployment, single process, unified codebase
 
 **Why This Architecture**:
-- ✅ TypeScript-first (95% of codebase)
-- ✅ Real-time Sonos polling (1-2 second updates)
-- ✅ Reusable integration pattern
-- ✅ `sonos` npm package requires Node.js (browser incompatible)
-- ✅ Simple deployment (one Node.js service)
-- ✅ Python isolated to hardware-only (~140 lines)
+- ✅ Unified Python codebase (easier to maintain)
+- ✅ Real-time Sonos polling with SoCo (1.5 second updates)
+- ✅ No subprocess overhead (direct import)
+- ✅ SoCo library more reliable than node-sonos
+- ✅ Apple Music support via ShareLinkPlugin
+- ✅ Simple deployment (single Python process)
+- ✅ Async/await throughout for better concurrency
 
 ---
 
@@ -56,29 +62,23 @@
 
 ```
 riverhub/
-├── backend/                      # Node.js backend
-│   ├── src/
-│   │   ├── index.ts              # Main entry point
-│   │   ├── config.ts             # Environment config
-│   │   ├── websocket.ts          # WebSocket server
-│   │   ├── services/
-│   │   │   ├── sonos.service.ts        # Sonos control (EventEmitter)
-│   │   │   ├── rfid.service.ts         # Python subprocess manager
-│   │   │   └── integration.service.ts  # Orchestration layer
-│   │   └── types/
-│   │       ├── sonos.types.ts
-│   │       ├── rfid.types.ts
-│   │       └── websocket.types.ts
+├── backend/                      # Python backend
+│   ├── main.py                   # FastAPI application entry point
+│   ├── services/                 # Service modules
+│   │   ├── card_mapping_service.py   # Card configuration
+│   │   ├── sonos_service.py          # Sonos control (SoCo)
+│   │   ├── rfid_service.py           # RFID reader integration
+│   │   ├── websocket_service.py      # WebSocket manager
+│   │   └── integration_service.py    # Orchestration layer
 │   ├── lib/
-│   │   └── rfid/                 # Python RFID service (external)
-│   │       ├── service.py        # Standalone service (stdin/stdout)
-│   │       ├── reader.py         # RC522 hardware abstraction
-│   │       ├── config.py         # Python config
-│   │       ├── requirements.txt
-│   │       └── README.md         # Protocol documentation
-│   ├── package.json
-│   ├── tsconfig.json
-│   └── .env.example
+│   │   └── rfid/                 # RFID hardware code
+│   │       ├── reader.py         # Hardware abstraction
+│   │       ├── config.py         # RFID configuration
+│   │       └── requirements-pi.txt   # Pi-specific deps
+│   ├── requirements.txt          # Python dependencies
+│   ├── card-mappings.json        # Card configuration data
+│   ├── CARD-MAPPINGS.md          # Card mapping docs
+│   └── .env.example              # Environment template
 │
 ├── frontend/
 │   ├── src/
@@ -111,17 +111,13 @@ riverhub/
 ## Tech Stack
 
 ### Backend
-- **Node.js** + **TypeScript** - Primary runtime
-- **Express** - HTTP server + static file serving
-- **ws** - WebSocket server
-- **sonos** - Sonos speaker control
-- **tsx** + **nodemon** - Hot reload (TypeScript + Python)
-- **dotenv** - Environment config
-
-### Python (Hardware Only)
-- **mfrc522** - RC522 RFID library
-- **RPi.GPIO** - GPIO access
-- **python-dotenv** - Environment config
+- **Python 3.9+** - Primary runtime
+- **FastAPI** - Modern async web framework
+- **uvicorn** - ASGI server with hot reload
+- **SoCo** - Sonos speaker control (local network)
+- **python-dotenv** - Environment configuration
+- **mfrc522** - RC522 RFID library (Pi only)
+- **RPi.GPIO** - GPIO access (Pi only)
 
 ### Frontend
 - **Vite** - Build tool
@@ -129,34 +125,67 @@ riverhub/
 - **Tailwind CSS** - Styling
 - **TanStack Query** - State management (if needed)
 
+### Development
+- **ESLint** + **Prettier** - Code quality
+- **Husky** - Pre-commit hooks
+- **watchexec** - File watching (sync.sh)
+- **rsync** - Remote sync (dev machine → Pi)
+
 ---
 
 ## Message Protocols
 
-### Python ↔ Node.js (stdin/stdout JSON lines)
-
-**Python → Node.js (stdout):**
-```json
-{"type": "card_read", "cardId": "123456789", "data": "spotify:playlist:abc", "timestamp": 1234567890}
-{"type": "write_complete", "success": true}
-{"type": "error", "message": "Failed to read card"}
-```
-
-**Node.js → Python (stdin):**
-```json
-{"type": "write_request", "data": "spotify:playlist:xyz"}
-{"type": "ping"}
-```
-
-### Node.js ↔ Frontend (WebSocket)
+### Backend ↔ Frontend (WebSocket)
 
 **Backend → Frontend:**
 ```typescript
-// Card read
-{type: 'card_read', cardId: string, data: string, timestamp: number}
+// Card read (successful)
+{
+  type: 'card_read',
+  cardId: string,
+  data: string,
+  actionType: string,
+  name: string,
+  timestamp: number
+}
 
-// Sonos state (pushed every 1-2s)
-{type: 'sonos_state', isPlaying: boolean, currentTrack: {...}, playbackState: string, volume: number, speakerName: string}
+// Card read (duplicate - ignored)
+{
+  type: 'card_read',
+  cardId: string,
+  data: string,
+  actionType: string,
+  name: string,
+  timestamp: number,
+  ignored: true,
+  reason: "Already playing"
+}
+
+// Card read (not registered)
+{
+  type: 'card_read',
+  cardId: string,
+  data: null,
+  timestamp: number,
+  error: "Card not registered"
+}
+
+// Sonos state (pushed every 1.5s)
+{
+  type: 'sonos_state',
+  playbackState: string,  // 'PLAYING', 'PAUSED_PLAYBACK', 'STOPPED'
+  isPlaying: boolean,
+  volume: number,
+  speakerName: string,
+  currentTrack: {
+    title: string,
+    artist: string,
+    album: string,
+    albumArtUri: string,
+    duration: string,
+    position: string
+  } | null
+}
 
 // Write result
 {type: 'write_complete', success: boolean, error?: string}
@@ -176,6 +205,32 @@ riverhub/
 {type: 'write_request', data: string}
 ```
 
+### Card Mapping Format
+
+Cards are stored in `card-mappings.json`:
+```json
+{
+  "cards": {
+    "923050338627": {
+      "type": "sonos",
+      "data": "title:Calm River",
+      "name": "Calm River"
+    },
+    "111111111": {
+      "type": "sonos",
+      "data": "url:https://music.apple.com/album/1715961558",
+      "name": "Apple Music Album"
+    }
+  }
+}
+```
+
+**Data Prefix Support:**
+- `title:Calm River` - Play Sonos favorite by title
+- `url:https://music.apple.com/...` - Play Apple Music (via ShareLinkPlugin)
+- `url:spotify:playlist:...` - Play Spotify playlist
+- `url:x-rincon-cpcontainer:...` - Play Sonos native URI
+
 ---
 
 ## Development Workflow
@@ -190,9 +245,9 @@ riverhub/
 **What it does:**
 - Auto-detects platform (Raspberry Pi vs dev machine)
 - Sets `RFID_MODE=real` on Pi, `RFID_MODE=mock` elsewhere
-- Hot reloads TypeScript changes (tsx)
-- Hot reloads Python changes (nodemon)
+- Hot reloads Python backend changes (uvicorn --reload)
 - Starts frontend dev server (Vite)
+- Installs dependencies automatically
 
 **No platform-specific scripts needed!**
 
@@ -218,20 +273,29 @@ This allows manual testing with real RFID cards without constant committing/pull
 
 ### Backend `.env`
 ```bash
+# Server Configuration
 PORT=8765
-RFID_MODE=mock                  # 'mock' or 'real' (auto-detected by dev.sh)
-RFID_POLL_INTERVAL=0.5
-RFID_DEBOUNCE_SECONDS=2.0
-SONOS_SPEAKER_NAME=Bedroom      # Configure your speaker name
-LOG_LEVEL=info
+NODE_ENV=development              # 'development' or 'production'
+STATIC_FILES=../frontend/dist    # Frontend build directory
+
+# RFID Configuration
+RFID_MODE=mock                    # 'mock' or 'real' (auto-detected by dev.sh)
+RFID_POLL_INTERVAL=0.5            # Card polling interval (seconds)
+RFID_DEBOUNCE_SECONDS=2.0         # Debounce duplicate reads
+
+# Sonos Configuration
+SONOS_SPEAKER_NAME=Bedroom        # Configure your speaker name
+
+# Card Mappings
+CARD_MAPPINGS_FILE=card-mappings.json
+
+# Logging
+LOG_LEVEL=info                    # Logging level
 ```
 
 ### Frontend `.env`
 ```bash
-# Development (Vite proxy handles WebSocket)
-VITE_WS_URL=ws://localhost:8765
-
-# Production (served by backend)
+# WebSocket URL (both development and production)
 VITE_WS_URL=ws://localhost:8765
 ```
 
@@ -264,49 +328,75 @@ VITE_WS_URL=ws://localhost:8765
 
 ---
 
-### ✅ Phase 3: Sonos Integration + Architecture Migration
-**Status**: Complete _(Migrated to hybrid Node.js + Python architecture)_
+### ✅ Phase 3: Sonos Integration + Pure Python Backend
+**Status**: Complete _(Migrated to pure Python backend with FastAPI and SoCo)_
 
 **What was completed:**
-1. **Backend Restructure**
-   - Created unified `backend/` folder with Node.js + TypeScript
-   - Moved Python RFID code to `backend/lib/rfid/`
-   - Ported Sonos service from frontend with EventEmitter pattern
-   - Created config system with platform detection
 
-2. **Python Subprocess Communication**
-   - Created stdin/stdout JSON protocol
-   - Built RFIDService managing Python subprocess
-   - Implemented auto-restart on crash
-   - Created standalone Python RFID service (~140 lines)
+1. **Pure Python Backend with FastAPI**
+   - Migrated from hybrid Node.js + Python subprocess to unified Python backend
+   - Implemented FastAPI for HTTP and WebSocket on single port (8765)
+   - All services in Python (CardMapping, Sonos, RFID, WebSocket, Integration)
+   - Direct RFID import (no subprocess communication needed)
 
-3. **Integration Layer**
-   - Built IntegrationService orchestrating RFID → Sonos → Frontend
-   - Created WebSocket server for frontend communication
-   - Implemented Sonos state polling (1.5 second intervals)
-   - Added health check endpoint
+2. **Sonos Integration with SoCo**
+   - Replaced node-sonos (UPnP errors) with SoCo library
+   - Implemented speaker discovery by name
+   - Added real-time state polling (1.5 second intervals)
+   - Async/await throughout with `asyncio.to_thread()` for blocking SoCo calls
+   - **Apple Music support via ShareLinkPlugin** (clear queue → parse URL → play)
 
-4. **Frontend Updates**
+3. **Card Mapping System**
+   - JSON-based card configuration (card-mappings.json)
+   - Prefix support: `title:` for favorites, `url:` for direct URLs
+   - Support for Apple Music, Spotify, and Sonos native URIs
+   - Duplicate card tap prevention (tracks current playing card)
+
+4. **Integration Layer**
+   - IntegrationService orchestrating RFID → Sonos → Frontend
+   - Automatic Apple Music URL detection
+   - Error handling with proper fallbacks
+   - WebSocket broadcasting for real-time updates
+
+5. **HTTP API Endpoints**
+   - `GET /health` - System health check
+   - `GET /api/cards` - List all card mappings
+   - `POST /api/cards/{card_id}` - Create/update card mapping
+   - `DELETE /api/cards/{card_id}` - Delete card mapping
+   - `GET /api/favorites` - List Sonos favorites
+
+6. **Frontend Updates**
    - Removed browser-based Sonos code (incompatible with browser)
    - Created useSonosState hook for backend-provided state
    - Updated to receive real-time Sonos updates via WebSocket
    - Added Sonos Status UI section
 
-5. **Development Tooling**
-   - Created universal `dev.sh` (works on Pi + dev machine)
-   - Updated `sync.sh` for new backend structure
-   - Hot reload for TypeScript and Python changes
+7. **Development Tooling**
+   - Updated `dev.sh` for Python uvicorn backend
+   - Automatic platform detection (Pi vs dev machine)
+   - Hot reload with uvicorn --reload
+   - Automatic dependency installation
 
 **Test results:**
-- Card scan triggers Sonos playback ✅
+- Card tap triggers Apple Music playback successfully ✅
+- No UPnP errors (SoCo works reliably) ✅
+- Duplicate taps ignored correctly ✅
 - Frontend receives real-time Sonos state updates ✅
-- Write requests work via WebSocket ✅
 - Integration service orchestrates all flows ✅
+- All HTTP API endpoints working ✅
 
 **Key learnings:**
-- `sonos` npm package requires Node.js runtime (browser incompatible)
-- Hybrid architecture maximizes TypeScript while preserving Python RFID code
+- SoCo library far more reliable than node-sonos
+- ShareLinkPlugin essential for Apple Music support
+- Pure Python simpler to deploy and maintain
+- Direct import eliminates subprocess complexity
 - Integration Service pattern provides reusable foundation for future devices
+
+**Commits:**
+- 569ec90: Migrate to pure Python backend with FastAPI and SoCo
+- 4dd76ba: Improve card mapping system with prefix support
+- 3c50f72: Add Apple Music share link support via ShareLinkPlugin
+- c608e1d: Prevent duplicate card taps from restarting playback
 
 ---
 
@@ -372,39 +462,58 @@ VITE_WS_URL=ws://localhost:8765
 
 ## Critical Implementation Notes
 
-### Node.js Backend Responsibilities
-- Spawn and manage Python RFID subprocess
-- Control Sonos speaker (discovery, playback, state polling)
+### Python Backend Responsibilities
+- Initialize and manage all services (RFID, Sonos, Card Mapping, WebSocket, Integration)
+- Control Sonos speaker via SoCo (discovery, playback, state polling)
 - Serve WebSocket connections to frontend
+- Serve HTTP API endpoints
 - Orchestrate RFID events → Sonos actions → Frontend updates
-- Serve static frontend files in production
+- Serve static frontend files in production (from `STATIC_FILES` path)
+- Direct import of RFID reader (no subprocess needed)
 
-### Python Subprocess Responsibilities
-- Initialize RC522 hardware
-- Poll for card reads (non-blocking, ~500ms interval)
-- Write events to stdout as JSON lines
-- Read commands from stdin as JSON lines
-- **Does NOT**: Connect to network, manage WebSocket, control Sonos
+### RFID Service Responsibilities
+- Direct import from `lib/rfid/reader.py`
+- Initialize RC522 hardware (or mock reader)
+- Poll for card reads using async loop (~500ms interval)
+- Invoke callback with card ID when detected
+- Support card writing via `write_card()` method
+- Debounce duplicate reads within configured timeframe
+
+### Sonos Service Responsibilities
+- Discover speaker by name using SoCo
+- Poll speaker state every 1.5 seconds
+- Handle Apple Music URLs via ShareLinkPlugin (clear queue → add → play)
+- Handle Sonos favorites by title (fetch list → find match → queue → play)
+- Handle generic URLs/URIs (queue vs direct playback based on type)
+- Invoke callback with state updates for broadcasting
+
+### Integration Service Responsibilities
+- Central orchestration point for all service interactions
+- Route RFID events → Card mapping lookup → Sonos playback
+- Broadcast events to frontend via WebSocket
+- Parse card data prefixes (`title:` vs `url:`)
+- Track currently playing card to prevent duplicate taps
+- Handle errors and broadcast to frontend
 
 ### Frontend Responsibilities
-- Connect to WebSocket
+- Connect to WebSocket (ws://localhost:8765/ws)
 - Display Sonos state (received from backend)
 - Render UI (clock, media controls, write interface)
-- Send control commands to backend
+- Send control commands to backend via WebSocket
 - Handle UI state and interactions
 
-### Sonos Integration
-- Uses `sonos` npm package (Node.js only, local network)
-- Discovery: Find speaker by room name (configurable via `SONOS_SPEAKER_NAME`)
-- State polling: Every 1.5 seconds
-- EventEmitter pattern for integration with other services
+### Card Mapping System
+- JSON file storage (`card-mappings.json`)
+- Card ID as dictionary key (no duplicate `id` field)
+- Prefix-based data format:
+  - `title:Calm River` → Play Sonos favorite
+  - `url:https://...` → Play URL (auto-detects Apple Music for ShareLinkPlugin)
+- Supports Sonos, lights, and other integration types (extensible)
 
 ### Integration Service Pattern
-- Central orchestration point for all hardware/service interactions
-- Connects: RFID events → Sonos actions → Frontend notifications
 - Reusable for future integrations:
-  - **Pure software** (APIs, services) → TypeScript services only
-  - **Hardware** (GPIO, I2C, SPI) → Python in `backend/lib/*/` + TypeScript manager
+  - **Pure software** (APIs, services) → Python services only
+  - **Hardware** (GPIO, I2C, SPI) → Python in `backend/lib/*/` + service wrapper
   - Example: Adding lights or sensors follows the same pattern
 
 ---
