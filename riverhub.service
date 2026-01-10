@@ -1,0 +1,23 @@
+[Unit]
+Description=RiverHub Backend Service
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=INSTALL_USER
+Group=INSTALL_USER
+WorkingDirectory=INSTALL_PATH/backend
+ExecStart=INSTALL_PATH/start-production.sh
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Environment
+Environment="PATH=INSTALL_PATH/backend/venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="NODE_ENV=production"
+Environment="RFID_MODE=real"
+
+[Install]
+WantedBy=multi-user.target

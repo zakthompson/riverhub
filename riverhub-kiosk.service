@@ -1,0 +1,17 @@
+[Unit]
+Description=RiverHub Kiosk Mode (Chromium Fullscreen)
+After=graphical.target
+Requires=riverhub.service
+
+[Service]
+Type=simple
+User=INSTALL_USER
+Group=INSTALL_USER
+ExecStart=INSTALL_PATH/kiosk.sh
+Restart=on-failure
+RestartSec=5
+Environment="DISPLAY=:0"
+Environment="XAUTHORITY=/home/INSTALL_USER/.Xauthority"
+
+[Install]
+WantedBy=graphical.target

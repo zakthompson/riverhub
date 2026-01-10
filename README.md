@@ -18,6 +18,20 @@ Tap an RFID card, and RiverHub reads the playlist URL, plays it on a Sonos speak
 
 ## Quick Start
 
+### Production Deployment (Kiosk Mode on Pi)
+
+**One command installs everything:**
+```bash
+./install-kiosk.sh
+```
+
+This installs RiverHub as a systemd service that:
+- Starts automatically on boot
+- Opens Chromium in fullscreen kiosk mode
+- Auto-restarts on failure
+
+See **[PRODUCTION.md](./PRODUCTION.md)** for complete deployment guide.
+
 ### Universal Development (Works on Pi AND Dev Machine)
 
 **One command starts everything:**
@@ -57,6 +71,7 @@ This allows manual testing with real RFID cards without constant committing/pull
 
 - **[CLAUDE.md](./CLAUDE.md)** - Project overview and development principles
 - **[PLAN.md](./PLAN.md)** - Implementation plan with phases and architecture details
+- **[PRODUCTION.md](./PRODUCTION.md)** - Production deployment and kiosk mode guide
 - **[backend/CARD-MAPPINGS.md](./backend/CARD-MAPPINGS.md)** - Card mapping system documentation
 
 ## Architecture
