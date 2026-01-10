@@ -5,8 +5,7 @@
 # This script works on both Raspberry Pi and development machines:
 # - Auto-detects platform (Pi vs dev machine)
 # - Sets RFID_MODE=real on Pi, RFID_MODE=mock on dev machines
-# - Hot reloads TypeScript changes (tsx)
-# - Hot reloads Python changes (nodemon)
+# - Hot reloads Python backend changes (uvicorn --reload)
 # - Starts frontend dev server
 #
 # Usage:
@@ -84,18 +83,18 @@ trap cleanup SIGINT SIGTERM EXIT
 check_prerequisites() {
     local missing=0
 
+    if ! command -v python3 &> /dev/null; then
+        log_error "Python 3 not found. Please install Python 3"
+        missing=1
+    fi
+
     if ! command -v node &> /dev/null; then
-        log_error "Node.js not found. Please install Node.js"
+        log_error "Node.js not found (required for frontend). Please install Node.js"
         missing=1
     fi
 
     if ! command -v npm &> /dev/null; then
-        log_error "npm not found. Please install npm"
-        missing=1
-    fi
-
-    if ! command -v python3 &> /dev/null; then
-        log_error "Python 3 not found. Please install Python 3"
+        log_error "npm not found (required for frontend). Please install npm"
         missing=1
     fi
 
@@ -109,50 +108,40 @@ install_backend_deps() {
     log "Checking backend dependencies..."
     cd "$BACKEND_DIR"
 
-    if [ ! -d "node_modules" ] || [ "package.json" -nt "node_modules" ]; then
-        log "Installing Node.js dependencies..."
-        npm install
-        log_success "✓ Backend dependencies installed"
-    else
-        log "Backend dependencies up to date"
-    fi
-
-    # Install Python dependencies (needed for both Pi and dev machines)
-    cd "$BACKEND_DIR/lib/rfid"
-
+    # Create Python virtual environment if it doesn't exist
     if [ ! -d "venv" ]; then
         log "Creating Python virtual environment..."
         python3 -m venv venv
         log_success "✓ Virtual environment created"
     fi
 
-    # Install cross-platform dependencies (all platforms)
+    # Install main backend dependencies (FastAPI, SoCo, etc.)
     if [ ! -f "venv/.deps_installed" ] || [ "requirements.txt" -nt "venv/.deps_installed" ]; then
-        log "Installing Python dependencies (cross-platform)..."
+        log "Installing Python backend dependencies..."
         if venv/bin/pip install -r requirements.txt; then
             touch venv/.deps_installed
-            log_success "✓ Cross-platform Python dependencies installed"
+            log_success "✓ Backend Python dependencies installed"
         else
-            log_error "Failed to install Python dependencies"
+            log_error "Failed to install backend Python dependencies"
             exit 1
         fi
     else
-        log "Cross-platform Python dependencies up to date"
+        log "Backend Python dependencies up to date"
     fi
 
-    # Install Pi-specific dependencies (only on Raspberry Pi)
+    # Install Pi-specific RFID hardware dependencies (only on Raspberry Pi)
     if [ "$PLATFORM" = "pi" ]; then
-        if [ ! -f "venv/.deps_pi_installed" ] || [ "requirements-pi.txt" -nt "venv/.deps_pi_installed" ]; then
-            log "Installing Python dependencies (Raspberry Pi hardware)..."
-            if venv/bin/pip install -r requirements-pi.txt; then
+        if [ ! -f "venv/.deps_pi_installed" ] || [ "lib/rfid/requirements-pi.txt" -nt "venv/.deps_pi_installed" ]; then
+            log "Installing Python dependencies (Raspberry Pi RFID hardware)..."
+            if venv/bin/pip install -r lib/rfid/requirements-pi.txt; then
                 touch venv/.deps_pi_installed
-                log_success "✓ Raspberry Pi Python dependencies installed"
+                log_success "✓ Raspberry Pi RFID hardware dependencies installed"
             else
-                log_error "Failed to install Raspberry Pi Python dependencies"
+                log_error "Failed to install Raspberry Pi RFID hardware dependencies"
                 exit 1
             fi
         else
-            log "Raspberry Pi Python dependencies up to date"
+            log "Raspberry Pi RFID hardware dependencies up to date"
         fi
     fi
 }
@@ -222,12 +211,12 @@ main() {
     log_success "=== Starting development servers ==="
     log ""
 
-    # Start backend with tsx + nodemon (hot reload for TS and Python)
+    # Start Python backend with uvicorn (hot reload enabled)
     cd "$BACKEND_DIR"
-    log "Starting backend server (tsx + nodemon)..."
-    log "  - Hot reload: TypeScript files in src/"
-    log "  - Hot reload: Python files in lib/rfid/"
-    npm run dev &
+    log "Starting Python backend (FastAPI + uvicorn)..."
+    log "  - Hot reload: Python files (*.py)"
+    log "  - Port: 8765"
+    venv/bin/uvicorn main:app --reload --host 0.0.0.0 --port 8765 &
     BACKEND_PID=$!
 
     # Give backend a moment to start
@@ -246,6 +235,7 @@ main() {
     log "  Backend:  http://localhost:8765"
     log "  Frontend: http://localhost:5173 (or check Vite output above)"
     log "  Health:   http://localhost:8765/health"
+    log "  WebSocket: ws://localhost:8765/ws"
     log ""
     log "  RFID Mode: ${RFID_MODE}"
     log ""

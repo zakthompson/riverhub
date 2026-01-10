@@ -6,12 +6,12 @@ Tap an RFID card, and RiverHub reads the playlist URL, plays it on a Sonos speak
 
 ## Project Status
 
-**Current Phase:** Phase 3 Complete ✅
-- ✅ Hybrid Node.js + Python backend architecture
-- ✅ Python RFID service with stdin/stdout protocol
-- ✅ Node.js Sonos integration with real-time state polling
+**Current Phase:** Phase 3 Complete ✅ - Pure Python Backend
+- ✅ Pure Python backend with FastAPI
+- ✅ Python RFID service (direct import, no subprocess)
+- ✅ Sonos integration with SoCo library (real-time state polling)
 - ✅ WebSocket communication (backend ↔ frontend)
-- ✅ Frontend receiving Sonos state updates
+- ✅ HTTP API for cards and favorites
 - ✅ Universal development script (Pi + dev machine)
 
 **Next Phase:** Phase 4 - Media Controls UI
@@ -28,8 +28,8 @@ Tap an RFID card, and RiverHub reads the playlist URL, plays it on a Sonos speak
 **What it does:**
 - Auto-detects your platform (Raspberry Pi vs dev machine)
 - Sets `RFID_MODE=real` on Pi, `RFID_MODE=mock` on dev machines
-- Hot reloads TypeScript and Python changes automatically
-- Starts backend (Node.js + Python subprocess)
+- Hot reloads Python backend changes automatically (uvicorn)
+- Starts backend (Python FastAPI)
 - Starts frontend dev server (Vite)
 
 Access at:
@@ -57,29 +57,33 @@ This allows manual testing with real RFID cards without constant committing/pull
 
 - **[CLAUDE.md](./CLAUDE.md)** - Project overview and development principles
 - **[PLAN.md](./PLAN.md)** - Implementation plan with phases and architecture details
-- **[backend/lib/rfid/README.md](./backend/lib/rfid/README.md)** - Python RFID protocol documentation
+- **[backend/CARD-MAPPINGS.md](./backend/CARD-MAPPINGS.md)** - Card mapping system documentation
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│ Node.js Backend (port 8765)                             │
+│ Python Backend (FastAPI, port 8765)                     │
 │                                                          │
 │  ┌───────────┐    ┌────────────┐    ┌──────────────┐  │
 │  │ WebSocket │◄──►│Integration │◄──►│Sonos Service │  │
-│  │  Server   │    │  Service   │    │(polling 1.5s)│  │
+│  │  Manager  │    │  Service   │    │  (SoCo lib)  │  │
+│  │           │    │            │    │(polling 1.5s)│  │
 │  └───────────┘    └─────┬──────┘    └──────────────┘  │
 │                          │                              │
 │                   ┌──────▼───────┐                      │
 │                   │RFID Service  │                      │
-│                   │(spawns ↓)    │                      │
-│                   └──────────────┘                      │
+│                   │(direct import│                      │
+│                   │lib/rfid/)    │                      │
+│                   └──────┬───────┘                      │
 │                          │                              │
-│                ┌─────────▼─────────┐                    │
-│                │Python subprocess  │                    │
-│                │(stdin/stdout JSON)│                    │
-│                └─────────┬─────────┘                    │
-└──────────────────────────┼─────────────────────────────┘
+│  ┌────────────────┐      │       ┌──────────────┐      │
+│  │Card Mapping   │◄─────┴──────►│HTTP API      │      │
+│  │Service        │               │(/health,     │      │
+│  │(JSON file)    │               │ /api/cards,  │      │
+│  │               │               │ /api/fav...)│      │
+│  └───────────────┘               └──────────────┘      │
+└──────────────────────────┬─────────────────────────────┘
                            │              ↕
                        GPIO/SPI    WebSocket (HTTP)
                            │              ↕
@@ -94,25 +98,22 @@ This allows manual testing with real RFID cards without constant committing/pull
 ```
 
 **Key Principles:**
-- **Node.js** handles: Sonos control, WebSocket server, business logic, integrations
-- **Python subprocess** handles: RFID hardware ONLY (stdin/stdout communication)
+- **Python + FastAPI** handles: Sonos control (SoCo), RFID hardware, WebSocket server, HTTP API
+- **Direct RFID import** no subprocess communication needed
 - **React frontend** handles: UI, displaying Sonos state, user interactions
-- **Integration Service** pattern: Reusable for future hardware (lights, sensors, etc.)
+- **Integration Service** pattern: Reusable orchestration for future hardware (lights, sensors, etc.)
+- **Pure Python** backend: Simpler deployment, single process, unified codebase
 
 ## Tech Stack
 
 ### Backend
-- **Node.js** + **TypeScript** - Primary runtime and business logic
-- **Express** - HTTP server + static file serving
-- **ws** - WebSocket server
-- **sonos** - Sonos speaker control (local network)
-- **tsx** + **nodemon** - Hot reload (TypeScript + Python)
-- **Python subprocess** - RFID hardware interface
-
-### Python (Hardware Only)
-- **mfrc522** - RC522 RFID library
-- **RPi.GPIO** - GPIO access
-- Python 3.9+
+- **Python 3.9+** - Primary runtime
+- **FastAPI** - Modern async web framework
+- **uvicorn** - ASGI server with hot reload
+- **SoCo** - Sonos speaker control (local network)
+- **python-dotenv** - Environment configuration
+- **mfrc522** - RC522 RFID library (Pi only)
+- **RPi.GPIO** - GPIO access (Pi only)
 
 ### Frontend
 - **React** + **TypeScript**
@@ -130,17 +131,17 @@ This allows manual testing with real RFID cards without constant committing/pull
 
 ### Implemented ✅
 - RFID card reading (real RC522 + mock mode)
-- Python subprocess communication (stdin/stdout JSON)
-- Node.js backend orchestration
-- Sonos speaker integration
+- Python FastAPI backend with async/await
+- Sonos speaker integration with SoCo library
 - Real-time Sonos state polling (1.5 second updates)
 - WebSocket bidirectional communication
 - Card read broadcasts to frontend
 - Card writing via web interface
+- HTTP API for cards and favorites
 - Sonos status display in UI
 - Auto-reconnection with backoff
 - Universal development script (Pi + dev machine)
-- Hot reload (TypeScript + Python)
+- Hot reload with uvicorn
 
 ### Planned 🚧
 - Enhanced media playback controls
@@ -181,9 +182,8 @@ npm run build
 **Backend:**
 ```bash
 cd backend
-npm run lint
-npm run type-check
-npm run build
+python3 -m py_compile main.py services/*.py  # Syntax check
+venv/bin/python -m pytest                     # Run tests (when added)
 ```
 
 Pre-commit hooks enforce these checks automatically.
@@ -193,13 +193,24 @@ Pre-commit hooks enforce these checks automatically.
 ### Backend `.env`
 
 ```bash
+# Server Configuration
 PORT=8765
-RFID_MODE=mock                   # 'mock' or 'real' (auto-set by dev.sh)
-RFID_POLL_INTERVAL=0.5           # Card polling interval (seconds)
-RFID_DEBOUNCE_SECONDS=2.0        # Debounce duplicate reads
-SONOS_SPEAKER_NAME=Bedroom       # Configure your Sonos speaker name
-LOG_LEVEL=info                   # Logging level
-NODE_ENV=development             # 'development' or 'production'
+NODE_ENV=development              # 'development' or 'production'
+STATIC_FILES=../frontend/dist    # Frontend build directory
+
+# RFID Configuration
+RFID_MODE=mock                    # 'mock' or 'real' (auto-set by dev.sh)
+RFID_POLL_INTERVAL=0.5            # Card polling interval (seconds)
+RFID_DEBOUNCE_SECONDS=2.0         # Debounce duplicate reads
+
+# Sonos Configuration
+SONOS_SPEAKER_NAME=Bedroom        # Configure your Sonos speaker name
+
+# Card Mappings
+CARD_MAPPINGS_FILE=card-mappings.json
+
+# Logging
+LOG_LEVEL=info                    # Logging level
 ```
 
 ### Frontend `.env`
@@ -212,21 +223,23 @@ VITE_WS_URL=ws://localhost:8765  # Backend WebSocket URL
 
 ```
 riverhub/
-├── backend/                      # Node.js backend
-│   ├── src/                      # TypeScript source
-│   │   ├── index.ts              # Main entry point
-│   │   ├── config.ts             # Environment config
-│   │   ├── websocket.ts          # WebSocket server
-│   │   ├── services/             # Sonos, RFID, Integration
-│   │   └── types/                # TypeScript types
+├── backend/                      # Python backend
+│   ├── main.py                   # FastAPI application entry point
+│   ├── services/                 # Service modules
+│   │   ├── card_mapping_service.py   # Card configuration
+│   │   ├── sonos_service.py          # Sonos control (SoCo)
+│   │   ├── rfid_service.py           # RFID reader integration
+│   │   ├── websocket_service.py      # WebSocket manager
+│   │   └── integration_service.py    # Orchestration layer
 │   ├── lib/
-│   │   └── rfid/                 # Python RFID service
-│   │       ├── service.py        # Standalone service
+│   │   └── rfid/                 # RFID hardware code
 │   │       ├── reader.py         # Hardware abstraction
-│   │       └── README.md         # Protocol docs
-│   ├── package.json
-│   ├── tsconfig.json
-│   └── .env.example
+│   │       ├── config.py         # RFID configuration
+│   │       └── requirements-pi.txt   # Pi-specific deps
+│   ├── requirements.txt          # Python dependencies
+│   ├── card-mappings.json        # Card configuration data
+│   ├── CARD-MAPPINGS.md          # Card mapping docs
+│   └── .env.example              # Environment template
 │
 ├── frontend/                     # React frontend
 │   ├── src/
@@ -282,13 +295,14 @@ Wiring to Raspberry Pi:
 Check the logs:
 ```bash
 cd backend
-npm run dev
+venv/bin/uvicorn main:app --reload --port 8765
 ```
 
 Common issues:
-- Node.js not installed
-- Python 3 not available on Pi
-- Missing dependencies: `npm install` in backend/
+- Python 3.9+ not installed
+- Missing dependencies: `cd backend && python3 -m venv venv && venv/bin/pip install -r requirements.txt`
+- On Pi: Missing hardware deps: `venv/bin/pip install -r lib/rfid/requirements-pi.txt`
+- Port 8765 already in use
 
 ### Sonos not connecting
 
@@ -302,14 +316,16 @@ Common issues:
 1. Ensure `RFID_MODE=real` in `backend/.env`
 2. Check SPI is enabled: `sudo raspi-config` → Interface Options → SPI
 3. Check wiring (3.3V, not 5V!)
-4. Check Python dependencies installed: `cd backend/lib/rfid && pip install -r requirements.txt`
+4. Check hardware dependencies installed: `cd backend && venv/bin/pip install -r lib/rfid/requirements-pi.txt`
+5. Check permissions: User must be in `gpio` and `spi` groups
 
 ### Dev script won't start
 
 1. Make executable: `chmod +x dev.sh`
-2. Check Node.js installed: `node --version`
-3. Check npm installed: `npm --version`
-4. On Pi, check Python 3: `python3 --version`
+2. Check Python 3.9+ installed: `python3 --version`
+3. Check Node.js installed (for frontend): `node --version`
+4. Check npm installed (for frontend): `npm --version`
+5. Ensure virtual environment can be created: `python3 -m venv --help`
 
 ## License
 

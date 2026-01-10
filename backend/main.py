@@ -1,142 +1,127 @@
-import asyncio
 import logging
 import os
-import time
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Optional
 
-from dotenv import load_dotenv
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from pydantic import BaseModel
+from dotenv import load_dotenv
 
-from config import config
-from rfid_reader import RFIDReader
+from services.rfid_service import RFIDService
+from services.sonos_service import SonosService
+from services.card_mapping_service import CardMappingService
+from services.websocket_service import WebSocketManager
+from services.integration_service import IntegrationService
 
+# Load environment variables
 load_dotenv()
 
+# Configure logging
 logging.basicConfig(
-    level=config.LOG_LEVEL,
+    level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
+# Configuration
+PORT = int(os.getenv("PORT", "8765"))
+NODE_ENV = os.getenv("NODE_ENV", "development")
+RFID_MODE = os.getenv("RFID_MODE", "mock")
+RFID_POLL_INTERVAL = float(os.getenv("RFID_POLL_INTERVAL", "0.5"))
+RFID_DEBOUNCE_SECONDS = float(os.getenv("RFID_DEBOUNCE_SECONDS", "2.0"))
+SONOS_SPEAKER_NAME = os.getenv("SONOS_SPEAKER_NAME", "Bedroom")
+STATIC_FILES = os.getenv("STATIC_FILES", "../frontend/dist")
+CARD_MAPPINGS_FILE = os.getenv("CARD_MAPPINGS_FILE", "card-mappings.json")
 
-class ConnectionManager:
-    def __init__(self):
-        self.active_connections: list[WebSocket] = []
-
-    async def connect(self, websocket: WebSocket):
-        await websocket.accept()
-        self.active_connections.append(websocket)
-        logger.info(f"Client connected. Total connections: {len(self.active_connections)}")
-
-    def disconnect(self, websocket: WebSocket):
-        self.active_connections.remove(websocket)
-        logger.info(f"Client disconnected. Total connections: {len(self.active_connections)}")
-
-    async def broadcast(self, message: dict):
-        """Broadcast message to all connected clients"""
-        disconnected = []
-        for connection in self.active_connections:
-            try:
-                await connection.send_json(message)
-            except Exception as e:
-                logger.error(f"Error broadcasting message: {e}")
-                disconnected.append(connection)
-
-        # Clean up disconnected clients
-        for conn in disconnected:
-            if conn in self.active_connections:
-                self.active_connections.remove(conn)
-
-
-manager = ConnectionManager()
-rfid_reader: RFIDReader | None = None
-rfid_polling_task: asyncio.Task | None = None
-
-
-async def poll_rfid_reader():
-    """
-    Continuously poll the RFID reader and broadcast card reads to all clients.
-    This runs in the background as a task during the app lifespan.
-    """
-    logger.info("Starting RFID polling task")
-
-    while True:
-        try:
-            result = rfid_reader.read_card()
-
-            if result:
-                card_id, data = result
-                message = {
-                    "type": "card_read",
-                    "cardId": card_id,
-                    "data": data,
-                    "timestamp": int(time.time())
-                }
-                logger.info(f"Card read: {card_id} -> {data}")
-                await manager.broadcast(message)
-
-            await asyncio.sleep(config.RFID_POLL_INTERVAL)
-
-        except Exception as e:
-            logger.error(f"Error in RFID polling task: {e}")
-            await asyncio.sleep(1)
+# Global service instances
+rfid_service: Optional[RFIDService] = None
+sonos_service: Optional[SonosService] = None
+card_mapping_service: Optional[CardMappingService] = None
+ws_manager: Optional[WebSocketManager] = None
+integration_service: Optional[IntegrationService] = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Lifespan context manager for startup and shutdown tasks.
-    Initializes RFID reader and starts polling task on startup.
-    """
-    global rfid_reader, rfid_polling_task
+    """Lifespan context manager for startup and shutdown"""
+    # Startup
+    logger.info("🚀 Starting RiverHub backend...")
+    logger.info(f"Environment: {NODE_ENV}")
+    logger.info(f"Port: {PORT}")
+    logger.info(f"RFID Mode: {RFID_MODE}")
 
-    logger.info("Starting RiverHub backend...")
-    logger.info(f"RFID mode: {config.RFID_MODE}")
-    logger.info(f"WebSocket port: {config.WS_PORT}")
+    global rfid_service, sonos_service, card_mapping_service, ws_manager, integration_service
 
-    # Initialize RFID reader
+    # Initialize services
+    logger.info("\n📦 Initializing services...")
+
+    # 1. Card Mapping Service
+    card_mapping_service = CardMappingService(CARD_MAPPINGS_FILE)
+    await card_mapping_service.load()
+
+    # 2. RFID Service
+    rfid_service = RFIDService(
+        mode=RFID_MODE,
+        poll_interval=RFID_POLL_INTERVAL,
+        debounce_seconds=RFID_DEBOUNCE_SECONDS,
+    )
+
+    # 3. Sonos Service
+    sonos_service = SonosService(SONOS_SPEAKER_NAME)
     try:
-        rfid_reader = RFIDReader(
-            mode=config.RFID_MODE,
-            poll_interval=config.RFID_POLL_INTERVAL,
-            debounce_seconds=config.RFID_DEBOUNCE_SECONDS
-        )
-        logger.info("RFID reader initialized successfully")
-    except Exception as e:
-        logger.error(f"Failed to initialize RFID reader: {e}")
-        logger.warning("Application will continue without RFID functionality")
+        await sonos_service.initialize()
+    except Exception as error:
+        logger.error(f"⚠️  Failed to initialize Sonos service: {error}")
+        logger.info("Continuing without Sonos - will retry on first playback attempt")
 
-    # Start RFID polling task if reader is initialized
-    if rfid_reader:
-        rfid_polling_task = asyncio.create_task(poll_rfid_reader())
-        logger.info("RFID polling task started")
+    # 4. WebSocket Manager
+    ws_manager = WebSocketManager()
+
+    # 5. Integration Service (connects everything)
+    integration_service = IntegrationService(
+        rfid_service, sonos_service, card_mapping_service, ws_manager
+    )
+    await integration_service.setup()
+
+    logger.info(f"\n✅ RiverHub backend running on port {PORT}")
+    logger.info(f"   WebSocket: ws://localhost:{PORT}/ws")
+    logger.info(f"   Health check: http://localhost:{PORT}/health")
 
     yield
 
     # Shutdown
-    logger.info("Shutting down RiverHub backend...")
-    if rfid_polling_task:
-        rfid_polling_task.cancel()
-        try:
-            await rfid_polling_task
-        except asyncio.CancelledError:
-            pass
-    logger.info("Shutdown complete")
+    logger.info("\n🛑 Shutting down gracefully...")
+    if integration_service:
+        await integration_service.shutdown()
+    logger.info("✅ Shutdown complete")
 
 
-app = FastAPI(title="RiverHub", lifespan=lifespan)
+# Create FastAPI app
+app = FastAPI(title="RiverHub Backend", lifespan=lifespan)
 
-# Mount static files for production mode
-if config.SERVE_STATIC:
-    static_path = Path(__file__).parent / config.STATIC_DIR
-    if static_path.exists():
-        app.mount("/assets", StaticFiles(directory=static_path / "assets"), name="assets")
-        logger.info(f"Serving static files from {static_path}")
-    else:
-        logger.warning(f"Static directory not found: {static_path}")
+# CORS middleware for development
+if NODE_ENV == "development":
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["http://localhost:5173", "http://localhost:5174"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+
+# Pydantic models for API
+class CardMappingCreate(BaseModel):
+    type: str
+    data: str
+    name: Optional[str] = None
+
+
+# HTTP API Endpoints
 
 
 @app.get("/health")
@@ -144,84 +129,129 @@ async def health_check():
     """Health check endpoint"""
     return {
         "status": "ok",
-        "rfid_mode": config.RFID_MODE,
-        "rfid_available": rfid_reader is not None,
-        "active_connections": len(manager.active_connections)
+        "environment": NODE_ENV,
+        "rfid": {
+            "mode": RFID_MODE,
+            "running": rfid_service.is_running() if rfid_service else False,
+        },
+        "sonos": {
+            "connected": sonos_service.is_connected() if sonos_service else False,
+            "speaker": SONOS_SPEAKER_NAME,
+        },
+        "websocket": {
+            "clients": ws_manager.get_client_count() if ws_manager else 0,
+        },
     }
 
 
-@app.get("/")
-async def serve_root():
-    """Serve the React app's index.html in production mode"""
-    if config.SERVE_STATIC:
-        static_path = Path(__file__).parent / config.STATIC_DIR / "index.html"
-        if static_path.exists():
-            return FileResponse(static_path)
-    return {"message": "RiverHub backend is running. Frontend should be served separately in dev mode."}
+@app.get("/api/cards")
+async def get_cards():
+    """Get all card mappings"""
+    try:
+        mappings = card_mapping_service.get_all_mappings()
+        return {
+            "cards": {
+                card_id: {
+                    "id": mapping.id,
+                    "type": mapping.type,
+                    "data": mapping.data,
+                    "name": mapping.name,
+                }
+                for card_id, mapping in mappings.items()
+            }
+        }
+    except Exception as error:
+        logger.error(f"Error fetching card mappings: {error}")
+        raise HTTPException(status_code=500, detail=str(error))
+
+
+@app.post("/api/cards/{card_id}")
+async def create_or_update_card(card_id: str, mapping: CardMappingCreate):
+    """Create or update a card mapping"""
+    try:
+        await card_mapping_service.set_mapping(
+            card_id, mapping.type, mapping.data, mapping.name
+        )
+        return {"success": True, "cardId": card_id, "type": mapping.type}
+    except Exception as error:
+        logger.error(f"Error setting card mapping: {error}")
+        raise HTTPException(status_code=500, detail=str(error))
+
+
+@app.delete("/api/cards/{card_id}")
+async def delete_card(card_id: str):
+    """Delete a card mapping"""
+    try:
+        deleted = await card_mapping_service.delete_mapping(card_id)
+        if not deleted:
+            raise HTTPException(status_code=404, detail=f"Card {card_id} not found")
+        return {"success": True, "cardId": card_id}
+    except HTTPException:
+        raise
+    except Exception as error:
+        logger.error(f"Error deleting card mapping: {error}")
+        raise HTTPException(status_code=500, detail=str(error))
+
+
+@app.get("/api/favorites")
+async def get_favorites():
+    """Get Sonos favorites"""
+    try:
+        favorites = await sonos_service.get_favorites()
+        return {"count": len(favorites), "favorites": favorites}
+    except Exception as error:
+        logger.error(f"Error fetching favorites: {error}")
+        raise HTTPException(status_code=500, detail=str(error))
+
+
+# WebSocket endpoint
 
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    """
-    WebSocket endpoint for bidirectional communication with frontend.
-    Handles write requests and receives card read broadcasts.
-    """
-    await manager.connect(websocket)
+    """WebSocket endpoint for real-time communication"""
+    await ws_manager.connect(websocket)
     try:
         while True:
+            # Receive message from client
             data = await websocket.receive_json()
-            logger.info(f"Received message: {data}")
-
-            message_type = data.get("type")
-
-            if message_type == "write_request":
-                # Handle RFID card write request
-                write_data = data.get("data", "")
-
-                if not rfid_reader:
-                    await websocket.send_json({
-                        "type": "write_complete",
-                        "success": False,
-                        "error": "RFID reader not available"
-                    })
-                    continue
-
-                if not write_data:
-                    await websocket.send_json({
-                        "type": "write_complete",
-                        "success": False,
-                        "error": "No data provided"
-                    })
-                    continue
-
-                logger.info(f"Write request received: {write_data}")
-
-                try:
-                    success = rfid_reader.write_card(write_data)
-                    await websocket.send_json({
-                        "type": "write_complete",
-                        "success": success,
-                        "error": None if success else "Write operation failed"
-                    })
-                except Exception as e:
-                    logger.error(f"Error writing to card: {e}")
-                    await websocket.send_json({
-                        "type": "write_complete",
-                        "success": False,
-                        "error": str(e)
-                    })
-            else:
-                logger.warning(f"Unknown message type: {message_type}")
-
+            # Handle message
+            await integration_service.handle_websocket_message(data, websocket)
     except WebSocketDisconnect:
-        manager.disconnect(websocket)
-        logger.info("Client disconnected normally")
-    except Exception as e:
-        logger.error(f"WebSocket error: {e}")
-        manager.disconnect(websocket)
+        ws_manager.disconnect(websocket)
+    except Exception as error:
+        logger.error(f"WebSocket error: {error}")
+        ws_manager.disconnect(websocket)
+
+
+# Static file serving (production)
+if NODE_ENV == "production":
+    static_dir = Path(STATIC_FILES)
+    if static_dir.exists():
+        logger.info(f"Serving static files from: {static_dir}")
+
+        # Serve assets directory
+        app.mount(
+            "/assets",
+            StaticFiles(directory=str(static_dir / "assets")),
+            name="assets",
+        )
+
+        # SPA fallback - serve index.html for all other routes
+        @app.get("/{full_path:path}")
+        async def serve_spa(full_path: str):
+            index_file = static_dir / "index.html"
+            if index_file.exists():
+                return FileResponse(index_file)
+            raise HTTPException(status_code=404, detail="Not found")
 
 
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=config.WS_PORT)
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=PORT,
+        reload=(NODE_ENV == "development"),
+    )
