@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useWebSocket } from './hooks/useWebSocket'
 import { useSonosState } from './hooks/useSonosState'
+import { MediaControls } from './components/MediaControls'
 import './App.css'
 
 function App() {
@@ -25,6 +26,26 @@ function App() {
       data: writeData,
     })
     setWriteData('')
+  }
+
+  const handlePlay = () => {
+    sendMessage({ type: 'sonos_play' })
+  }
+
+  const handlePause = () => {
+    sendMessage({ type: 'sonos_pause' })
+  }
+
+  const handleNext = () => {
+    sendMessage({ type: 'sonos_next' })
+  }
+
+  const handlePrevious = () => {
+    sendMessage({ type: 'sonos_previous' })
+  }
+
+  const handleVolumeChange = (volume: number) => {
+    sendMessage({ type: 'sonos_volume', volume })
   }
 
   const getStatusColor = () => {
@@ -57,6 +78,21 @@ function App() {
     }
   }
 
+  // Show MediaControls when there's an active track
+  if (sonosState?.currentTrack) {
+    return (
+      <MediaControls
+        sonosState={sonosState}
+        onPlay={handlePlay}
+        onPause={handlePause}
+        onNext={handleNext}
+        onPrevious={handlePrevious}
+        onVolumeChange={handleVolumeChange}
+      />
+    )
+  }
+
+  // Show debug UI when no music is playing
   return (
     <div className="min-h-screen bg-gray-900 p-8 text-white">
       <div className="mx-auto max-w-4xl">
