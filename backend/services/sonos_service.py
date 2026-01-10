@@ -161,8 +161,12 @@ class SonosService:
         try:
             logger.info(f"Playing URL: {url}")
 
+            # Handle Apple Music share links with ShareLinkPlugin
+            if self._is_apple_music_url(url):
+                logger.info("Detected Apple Music URL, using ShareLinkPlugin")
+                await self._play_apple_music_sharelink(url)
             # For URIs that need queueing (playlists, albums, etc.)
-            if self._needs_queueing(url):
+            elif self._needs_queueing(url):
                 await asyncio.to_thread(self.speaker.clear_queue)
                 await asyncio.to_thread(self.speaker.add_uri_to_queue, url)
                 await asyncio.to_thread(self.speaker.play_from_queue, 0)
@@ -173,6 +177,42 @@ class SonosService:
         except Exception as error:
             logger.error(f"Error playing URL: {error}")
             raise
+
+    async def _play_apple_music_sharelink(self, url: str) -> None:
+        """Play Apple Music share link using ShareLinkPlugin"""
+        try:
+            # Import ShareLinkPlugin
+            from soco.plugins.sharelink import ShareLinkPlugin
+
+            # Clear the queue
+            logger.info("Clearing Sonos queue for Apple Music link")
+            await asyncio.to_thread(self.speaker.clear_queue)
+
+            # Initialize ShareLinkPlugin and add to queue
+            logger.info(f"Adding Apple Music link to queue: {url}")
+            sharelink = ShareLinkPlugin(self.speaker)
+            position = await asyncio.to_thread(
+                sharelink.add_share_link_to_queue, url
+            )
+
+            logger.info(f"Apple Music link added at queue position {position}")
+
+            # Play from the start of the queue
+            await asyncio.to_thread(self.speaker.play_from_queue, 0)
+            logger.info("Started playback from queue")
+
+        except ImportError:
+            logger.error("ShareLinkPlugin not available. Update SoCo to version 0.26.0+")
+            raise RuntimeError(
+                "ShareLinkPlugin not available. Please update SoCo to version 0.26.0 or later."
+            )
+        except Exception as error:
+            logger.error(f"Error playing Apple Music share link: {error}")
+            raise
+
+    def _is_apple_music_url(self, url: str) -> bool:
+        """Check if URL is an Apple Music share link"""
+        return "music.apple.com" in url.lower()
 
     def _needs_queueing(self, url: str) -> bool:
         """Check if URL needs to be queued vs played directly"""

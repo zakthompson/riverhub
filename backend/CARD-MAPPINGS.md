@@ -29,10 +29,26 @@ The card mapping system allows you to assign actions to RFID cards without writi
 - **data**: Action payload with prefix (format depends on type)
   - For Sonos: Use `"title:..."` or `"url:..."` prefix
     - `"title:Calm River"` - Play Sonos Favorite by title
-    - `"url:https://music.apple.com/..."` - Play URL directly
+    - `"url:https://music.apple.com/..."` - Play Apple Music (uses ShareLinkPlugin)
     - `"url:spotify:playlist:..."` - Play Spotify playlist
+    - `"url:x-rincon-cpcontainer:..."` - Play Sonos native URI
   - For future integrations: Could be object with settings
 - **name**: (Optional) Friendly display name for the card
+
+### Apple Music Support
+
+Apple Music share links are automatically detected and handled using SoCo's ShareLinkPlugin:
+1. Queue is cleared
+2. ShareLinkPlugin parses the Apple Music URL
+3. Content is added to the queue
+4. Playback starts from the queue
+
+**Supported Apple Music URLs:**
+- Albums: `https://music.apple.com/album/1715961558`
+- Playlists: `https://music.apple.com/playlist/pl.u-...`
+- Songs: `https://music.apple.com/song/...`
+
+**Requirements:** SoCo 0.26.0 or later (included in requirements.txt)
 
 ## Usage
 
