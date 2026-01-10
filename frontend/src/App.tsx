@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useWebSocket } from './hooks/useWebSocket'
+import { useSonosState } from './hooks/useSonosState'
 import './App.css'
 
 function App() {
   const { status, lastMessage, messages, sendMessage, isConnected } = useWebSocket(10)
+  const { sonosState, sonosError } = useSonosState()
   const [writeData, setWriteData] = useState('')
 
   useEffect(() => {
@@ -76,13 +78,49 @@ function App() {
         </div>
 
         <div className="mb-6 rounded-lg bg-gray-800 p-6">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-xl font-semibold">Sonos Status</h2>
+            <span
+              className={`font-mono ${
+                !sonosState
+                  ? 'text-yellow-500'
+                  : sonosState.speakerName && !sonosError
+                    ? 'text-green-500'
+                    : 'text-red-500'
+              }`}
+            >
+              {!sonosState
+                ? '○ Waiting for backend...'
+                : sonosState.speakerName && !sonosError
+                  ? `● ${sonosState.speakerName}`
+                  : '✗ Error'}
+            </span>
+          </div>
+          {sonosError ? (
+            <p className="text-sm text-red-400">{sonosError}</p>
+          ) : sonosState?.speakerName ? (
+            <div className="text-sm text-gray-400">
+              <p>Connected to speaker: {sonosState.speakerName}</p>
+              {sonosState.isPlaying && sonosState.currentTrack && (
+                <div className="mt-2 rounded bg-gray-700 p-2">
+                  <p className="font-semibold text-white">{sonosState.currentTrack.title}</p>
+                  <p className="text-xs">{sonosState.currentTrack.artist}</p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-400">Discovering speaker...</p>
+          )}
+        </div>
+
+        <div className="mb-6 rounded-lg bg-gray-800 p-6">
           <h2 className="mb-4 text-xl font-semibold">Write Card</h2>
           <div className="flex gap-2">
             <input
               type="text"
               value={writeData}
               onChange={(e) => setWriteData(e.target.value)}
-              placeholder="Enter playlist URL (e.g., spotify:playlist:abc123)"
+              placeholder="Enter playlist URL (Apple Music, Spotify, etc.)"
               className="flex-1 rounded border border-gray-600 bg-gray-700 px-4 py-2 text-white focus:border-blue-500 focus:outline-none"
               disabled={!isConnected}
             />

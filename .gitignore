@@ -14,6 +14,7 @@ downloads/
 eggs/
 .eggs/
 lib/
+!backend/lib/
 lib64/
 parts/
 sdist/
@@ -36,6 +37,9 @@ pnpm-debug.log*
 
 # Frontend build
 frontend/dist/
+
+# Backend data
+backend/card-mappings.json
 
 # Environment variables
 .env
