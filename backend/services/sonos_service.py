@@ -306,13 +306,25 @@ class SonosService:
         try:
             track_info = await asyncio.to_thread(self.speaker.get_current_track_info)
 
-            if not track_info or not track_info.get("title"):
+            if not track_info:
+                return None
+
+            # Get title - for HTTP audio files, it may be in 'title' or we extract from URI
+            title = track_info.get("title")
+            uri = track_info.get("uri", "")
+
+            # If no title but we have a URI, extract title from the filename
+            if not title and uri:
+                title = extract_title_from_url(uri)
+
+            # Still no title means nothing is playing
+            if not title:
                 return None
 
             return TrackInfo(
-                title=track_info.get("title", "Unknown"),
-                artist=track_info.get("artist", "Unknown Artist"),
-                album=track_info.get("album", "Unknown Album"),
+                title=title,
+                artist=track_info.get("artist") or "Unknown Artist",
+                album=track_info.get("album") or "Unknown Album",
                 album_art_uri=track_info.get("album_art"),
                 duration=track_info.get("duration"),
                 position=track_info.get("position"),
