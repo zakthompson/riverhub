@@ -1,9 +1,32 @@
 import asyncio
 import logging
+import urllib.request
+import urllib.parse
 from typing import Optional, Callable, List, Dict, Any
 from dataclasses import dataclass
+from pathlib import PurePosixPath
 
 logger = logging.getLogger(__name__)
+
+
+def resolve_redirects(url: str, timeout: int = 10) -> str:
+    """Follow HTTP redirects and return the final URL."""
+    request = urllib.request.Request(url, method="HEAD")
+    request.add_header("User-Agent", "RiverHub/1.0")
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return response.url
+    except Exception as e:
+        logger.warning(f"Failed to resolve redirects for {url}: {e}")
+        return url  # Fall back to original URL
+
+
+def extract_title_from_url(url: str) -> str:
+    """Extract a title from URL filename, removing extension and decoding."""
+    parsed = urllib.parse.urlparse(url)
+    path = urllib.parse.unquote(parsed.path)
+    filename = PurePosixPath(path).stem  # Get filename without extension
+    return filename if filename else "Audio"
 
 
 @dataclass
@@ -171,8 +194,23 @@ class SonosService:
                 await asyncio.to_thread(self.speaker.add_uri_to_queue, url)
                 await asyncio.to_thread(self.speaker.play_from_queue, 0)
             else:
-                # Direct playback for tracks
-                await asyncio.to_thread(self.speaker.play_uri, url)
+                # Direct playback for tracks (e.g., raw audio file URLs)
+                await asyncio.to_thread(self.speaker.clear_queue)
+
+                if url.startswith("http://") or url.startswith("https://"):
+                    # Resolve redirects first (e.g., Dropbox redirects to CDN)
+                    resolved_url = await asyncio.to_thread(resolve_redirects, url)
+                    if resolved_url != url:
+                        logger.info(f"Resolved redirect to: {resolved_url}")
+
+                    # Extract title from URL for DIDL metadata (required for playback)
+                    title = extract_title_from_url(resolved_url)
+                    await asyncio.to_thread(
+                        self.speaker.play_uri, resolved_url, title=title
+                    )
+                else:
+                    # For other URI schemes (x-file-cifs, etc.), use direct playback
+                    await asyncio.to_thread(self.speaker.play_uri, url)
 
         except Exception as error:
             logger.error(f"Error playing URL: {error}")

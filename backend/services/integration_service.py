@@ -110,18 +110,15 @@ class IntegrationService:
             if mapping.type == "sonos":
                 # Play Sonos content
                 if isinstance(mapping.data, str):
-                    # Parse prefix (url: or title:)
-                    if ":" in mapping.data and not self._is_uri(mapping.data):
-                        prefix, _, value = mapping.data.partition(":")
-                        if prefix == "url":
-                            logger.info(f"Playing Sonos URL: {value}")
-                            await self.sonos.play_url(value)
-                        elif prefix == "title":
-                            logger.info(f"Playing Sonos favorite by title: {value}")
-                            await self.sonos.play_favorite_by_title(value)
-                        else:
-                            logger.warning(f"Unknown prefix '{prefix}', treating as favorite title")
-                            await self.sonos.play_favorite_by_title(mapping.data)
+                    # Check for explicit prefixes first (url: or title:)
+                    if mapping.data.startswith("url:"):
+                        url = mapping.data[4:]  # Strip "url:" prefix
+                        logger.info(f"Playing Sonos URL: {url}")
+                        await self.sonos.play_url(url)
+                    elif mapping.data.startswith("title:"):
+                        title = mapping.data[6:]  # Strip "title:" prefix
+                        logger.info(f"Playing Sonos favorite by title: {title}")
+                        await self.sonos.play_favorite_by_title(title)
                     # Legacy support: check if it's a URI or a favorite title
                     elif self._is_uri(mapping.data):
                         logger.info(f"Playing Sonos URL (legacy): {mapping.data}")
@@ -149,6 +146,7 @@ class IntegrationService:
                     "message": str(error),
                 }
             )
+            raise
 
     def _is_uri(self, string: str) -> bool:
         """Check if string looks like a URI (has a scheme)"""

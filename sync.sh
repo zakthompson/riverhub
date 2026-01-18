@@ -21,6 +21,7 @@ watchexec -r \
     --filter="protect backend/dist/" \
     --filter="protect backend/lib/rfid/venv/" \
     --filter="protect backend/lib/rfid/__pycache__/" \
+    --filter="protect backend/card-mappings.json" \
     --filter="protect frontend/node_modules/" \
     --filter="protect frontend/dist/" \
     --filter="protect frontend/.vite/" \
@@ -32,4 +33,5 @@ watchexec -r \
     --exclude=__pycache__/ \
     --exclude=.DS_Store \
     --exclude=.env \
+    --exclude=backend/card-mappings.json \
     ./ rpi:/home/river/riverhub/'
